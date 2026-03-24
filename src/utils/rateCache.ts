@@ -20,7 +20,7 @@
  * CONSOLIDATION RATIONALE
  * -----------------------
  * Variants A and B agree on logical components; B gives the concrete template.
- * Variant C (query params) is the wire format — it's the API boundary, not the cache key.
+ * Variant C (query params) is the wire format — it is the API boundary, not the cache key.
  * The cache key must be self-describing (no shorthand) and collision-resistant.
  *
  * CANONICAL FORMAT (this file)
@@ -31,36 +31,36 @@
  *   - carrier       : string carrier code, e.g. "stamps_com" (lowercased, trimmed)
  *   - service       : string service code, e.g. "usps_priority_mail" (lowercased, trimmed)
  *   - weight        : numeric ounces, normalised to 4 decimal places, e.g. "16.0000"
- *   - dimensions    : "LxWxH" integers in inches, e.g. "12x8x4" (sorted: L≥W≥H)
+ *   - dimensions    : "LxWxH" integers in inches, e.g. "12x8x4" (sorted: L>=W>=H)
  *   - origin        : 5-digit postal code, e.g. "92101"
  *   - destination   : 5-digit postal code, e.g. "10001"
  *   - residential   : "1" or "0" (boolean encoded as digit to avoid "true"/"false" ambiguity)
  *
  * INVARIANTS (what changes the key)
  * ----------------------------------
- *   ✅ Weight in ounces (different units → must convert before key generation)
- *   ✅ Carrier code (stamps_com ≠ fedex)
- *   ✅ Service code (priority ≠ ground)
- *   ✅ Package dimensions L×W×H (different sizes → different rate buckets)
- *   ✅ Origin ZIP (5-digit; different origin → different rate)
- *   ✅ Destination ZIP (5-digit; different dest → different rate)
- *   ✅ Residential flag ("1"/"0"; residential surcharges differ)
+ *   Weight in ounces (different units must convert before key generation)
+ *   Carrier code (stamps_com != fedex)
+ *   Service code (priority != ground)
+ *   Package dimensions L x W x H (different sizes = different rate buckets)
+ *   Origin ZIP (5-digit; different origin = different rate)
+ *   Destination ZIP (5-digit; different dest = different rate)
+ *   Residential flag ("1"/"0"; residential surcharges differ)
  *
  * DOES NOT CHANGE THE KEY (do not include)
  * -----------------------------------------
- *   ❌ orderId — rates are reusable across orders with same params
- *   ❌ storeId — rate lookup is per-carrier-account; storeId is a lookup hint, not a rate input
- *   ❌ signature — a rate response field, not a rate request input
- *   ❌ clientId — resolved upstream via carrier-for-store lookup
- *   ❌ timestamps — rates have their own TTL
+ *   orderId — rates are reusable across orders with same params
+ *   storeId — rate lookup is per-carrier-account; storeId is a lookup hint, not a rate input
+ *   signature — a rate response field, not a rate request input
+ *   clientId — resolved upstream via carrier-for-store lookup
+ *   timestamps — rates have their own TTL
  *
  * COLLISION RISKS
  * ---------------
- *   1. Weight unit mismatch (grams vs ounces → always convert to ounces before calling)
- *   2. Dimension ordering (e.g. 12x8x4 vs 4x12x8 → dimensions are sorted descending)
- *   3. Case sensitivity (e.g. "USPS" vs "usps" → all codes lowercased)
- *   4. ZIP padding (e.g. "92101" vs "092101" → always 5-digit, strip non-digits)
- *   5. Residential ambiguity ("true" vs "1" vs true → always "1"/"0")
+ *   1. Weight unit mismatch (grams vs ounces -> always convert to ounces before calling)
+ *   2. Dimension ordering (e.g. 12x8x4 vs 4x12x8 -> dimensions are sorted descending)
+ *   3. Case sensitivity (e.g. "USPS" vs "usps" -> all codes lowercased)
+ *   4. ZIP padding (e.g. "92101" vs "092101" -> always 5-digit, strip non-digits)
+ *   5. Residential ambiguity ("true" vs "1" vs true -> always "1"/"0")
  */
 
 // ---------------------------------------------------------------------------
@@ -129,7 +129,7 @@ export interface RateCacheKeyParams {
   /** Service code, e.g. "usps_priority_mail" (case-insensitive; will be lowercased). */
   service: string;
 
-  /** Package weight value. Must be paired with `weightUnit`. */
+  /** Package weight value. Must be paired with weightUnit. */
   weight: number;
 
   /** Unit of the weight value. Converted to ounces internally. */
@@ -164,7 +164,7 @@ const OUNCES_PER_POUND = 16;
 
 /**
  * Convert weight to ounces and return as a 4-decimal-place string.
- * Invariant: weight ≥ 0.
+ * Invariant: weight >= 0.
  */
 function normaliseWeight(value: number, unit: WeightUnit): string {
   if (!Number.isFinite(value) || value < 0) {
@@ -187,7 +187,7 @@ function normaliseWeight(value: number, unit: WeightUnit): string {
 
 /**
  * Encode dimensions as "LxWxH" with sides sorted descending.
- * Invariant: all dimensions ≥ 1.
+ * Invariant: all dimensions > 0.
  */
 function normaliseDimensions(length: number, width: number, height: number): string {
   for (const [name, val] of [['length', length], ['width', width], ['height', height]] as [string, number][]) {
@@ -240,20 +240,10 @@ export class RateCacheKeyError extends Error {
 /**
  * Generate the canonical rate cache key.
  *
- * Format: `${carrier}-${service}-${weight}-${dimensions}-${origin}-${destination}-${residential}`
+ * Format: carrier-service-weight-dimensions-origin-destination-residential
  *
- * Example:
- *   buildRateCacheKey({
- *     carrier: 'stamps_com',
- *     service: 'usps_priority_mail',
- *     weight: 16,
- *     weightUnit: WeightUnit.Ounces,
- *     dimensions: { length: 12, width: 8, height: 4 },
- *     originZip: '92101',
- *     destinationZip: '10001',
- *     residential: true,
- *   })
- *   → "stamps_com-usps_priority_mail-16.0000-12x8x4-92101-10001-1"
+ * Example output:
+ *   "stamps_com-usps_priority_mail-16.0000-12x8x4-92101-10001-1"
  *
  * @throws {RateCacheKeyError} if any invariant is violated
  */
@@ -277,7 +267,7 @@ export function buildRateCacheKey(params: RateCacheKeyParams): string {
  * Parse a canonical rate cache key back into its components.
  * Useful for debugging and logging.
  *
- * @throws {RateCacheKeyError} if the key does not have 7 components
+ * @throws {RateCacheKeyError} if the key does not have enough components
  */
 export function parseRateCacheKey(key: string): {
   carrier: string;
@@ -289,10 +279,9 @@ export function parseRateCacheKey(key: string): {
   residential: boolean;
 } {
   const parts = key.split('-');
-  // carrier and service may themselves contain '-', so we must parse from both ends
+  // carrier and service may themselves contain '-', so we parse from both ends
   // Format: carrier-service-weight-dimensions-origin-destination-residential
   // dimensions = "LxWxH" (no dash), weight = "NNNN.NNNN" (no dash)
-  // Parse from the end: residential, destination, origin, dimensions, weight, then service+carrier
   if (parts.length < 7) {
     throw new RateCacheKeyError(`Cannot parse key: expected at least 7 dash-separated parts, got ${parts.length}: "${key}"`);
   }
@@ -303,8 +292,6 @@ export function parseRateCacheKey(key: string): {
   const weight = parts[parts.length - 5];
   // Everything before weight is carrier + service (joined back)
   const carrierService = parts.slice(0, parts.length - 5).join('-');
-  // carrier and service: split on first '-' after recognising standard carrier patterns
-  // We use a greedy split: the first known carrier prefix, or fall back to first '-'
   const firstDash = carrierService.indexOf('-');
   if (firstDash === -1) {
     throw new RateCacheKeyError(`Cannot split carrier/service from: "${carrierService}"`);
