@@ -1,0 +1,206 @@
+$table-bg: #ffffff;
+$table-header-bg: #f8f9fb;
+$table-border: #e5e7eb;
+$table-hover: #f3f4f6;
+$table-selected: #eff6ff;
+$text-primary: #111827;
+$text-secondary: #6b7280;
+$text-muted: #9ca3af;
+$accent: #3b82f6;
+
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid $table-border;
+  background: $table-bg;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.toolbarLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.toolbarRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: $text-secondary;
+}
+
+.statusTabs {
+  display: flex;
+  gap: 2px;
+}
+
+.statusTab {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  color: $text-secondary;
+  transition: all 0.15s;
+
+  &:hover {
+    background: $table-hover;
+  }
+
+  &.active {
+    background: $accent;
+    color: white;
+  }
+}
+
+.tableWrapper {
+  flex: 1;
+  overflow: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.thead {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.th {
+  padding: 8px 10px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: $text-secondary;
+  background: $table-header-bg;
+  border-bottom: 2px solid $table-border;
+  white-space: nowrap;
+  user-select: none;
+
+  &.sortable {
+    cursor: pointer;
+
+    &:hover {
+      color: $text-primary;
+    }
+  }
+}
+
+.tr {
+  border-bottom: 1px solid $table-border;
+  transition: background 0.1s;
+
+  &:hover {
+    background: $table-hover;
+  }
+
+  &.selected {
+    background: $table-selected;
+  }
+}
+
+.td {
+  padding: 8px 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: $text-primary;
+  vertical-align: middle;
+}
+
+.checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: $accent;
+}
+
+.ageGreen { color: #16a34a; font-weight: 600; }
+.ageOrange { color: #ea580c; font-weight: 600; }
+.ageRed { color: #dc2626; font-weight: 600; }
+
+.storeBadge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  background: #f0f0f0;
+  color: $text-secondary;
+}
+
+.rateCell {
+  font-weight: 600;
+  color: #059669;
+}
+
+.marginPositive { color: #059669; }
+.marginNegative { color: #dc2626; }
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  border-top: 1px solid $table-border;
+  background: $table-bg;
+  font-size: 13px;
+  color: $text-secondary;
+}
+
+.pageBtn {
+  padding: 5px 12px;
+  border: 1px solid $table-border;
+  border-radius: 5px;
+  background: white;
+  cursor: pointer;
+  font-size: 12px;
+  color: $text-primary;
+  transition: all 0.15s;
+
+  &:hover:not(:disabled) {
+    background: $table-hover;
+    border-color: $accent;
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: $text-secondary;
+  font-size: 14px;
+}
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: $text-muted;
+  font-size: 14px;
+}
