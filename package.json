@@ -8,7 +8,9 @@
     "dev": "rsbuild dev --open",
     "preview": "rsbuild preview",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src/"
+    "lint": "eslint src/",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@rsbuild/plugin-sass": "^1.5.1",
