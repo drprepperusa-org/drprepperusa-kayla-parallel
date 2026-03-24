@@ -1,5 +1,6 @@
 import Layout from './components/Layout/Layout';
 import OrdersView from './components/OrdersView/OrdersView';
+import OrderDetail from './components/OrderDetail';
 import PlaceholderPage from './pages/PlaceholderPage';
 import { useUIStore } from './stores/uiStore';
 
@@ -34,6 +35,7 @@ export default function App() {
   return (
     <Layout>
       {renderView()}
+      <OrderDetail />
     </Layout>
   );
 }

@@ -153,6 +153,10 @@ export function getMockOrdersByStatus(status: string, page = 1, pageSize = 50): 
   };
 }
 
+export function getMockOrderById(orderId: number): OrderDTO | undefined {
+  return getMockOrders().find((o) => o.orderId === orderId);
+}
+
 export function getMockStoreCounts(status: string): Record<number, number> {
   const all = getMockOrders().filter(o => o.status === status);
   const counts: Record<number, number> = {};

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<coverage generated="1774334726807" clover="3.2.0">
+  <project timestamp="1774334726807" name="All files">
+    <metrics statements="21" coveredstatements="21" conditionals="16" coveredconditionals="16" methods="4" coveredmethods="4" elements="41" coveredelements="41" complexity="0" loc="21" ncloc="21" packages="1" files="1" classes="1"/>
+    <file name="residentialService.ts" path="/Users/albert_mini/workspace/projects/kaylafromsd/drprepperusa-kayla-parallel/src/utils/residentialService.ts">
+      <metrics statements="21" coveredstatements="21" conditionals="16" coveredconditionals="16" methods="4" coveredmethods="4"/>
+      <line num="39" count="1" type="stmt"/>
+      <line num="55" count="1" type="stmt"/>
+      <line num="92" count="30" type="cond" truecount="2" falsecount="0"/>
+      <line num="93" count="3" type="stmt"/>
+      <line num="99" count="27" type="cond" truecount="2" falsecount="0"/>
+      <line num="100" count="4" type="stmt"/>
+      <line num="108" count="23" type="stmt"/>
+      <line num="109" count="30" type="cond" truecount="4" falsecount="0"/>
+      <line num="110" count="2" type="stmt"/>
+      <line num="118" count="21" type="cond" truecount="2" falsecount="0"/>
+      <line num="119" count="30" type="cond" truecount="2" falsecount="0"/>
+      <line num="120" count="12" type="stmt"/>
+      <line num="122" count="12" type="cond" truecount="2" falsecount="0"/>
+      <line num="123" count="1" type="stmt"/>
+      <line num="131" count="11" type="cond" truecount="2" falsecount="0"/>
+      <line num="132" count="3" type="stmt"/>
+      <line num="141" count="8" type="stmt"/>
+      <line num="150" count="9" type="stmt"/>
+      <line num="166" count="9" type="stmt"/>
+      <line num="167" count="9" type="stmt"/>
+      <line num="181" count="5" type="stmt"/>
+    </file>
+  </project>
+</coverage>
