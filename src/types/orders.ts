@@ -2,6 +2,8 @@
  * Order domain types — ported from prepship-v3
  */
 
+import type { BillingCalculation } from '../utils/billingService';
+
 export interface OrderItem {
   sku: string;
   quantity: number;
@@ -49,6 +51,19 @@ export interface Rate {
   surcharges?: Array<{ name: string; amount: number }>;
 }
 
+/**
+ * Enriched rate selection — populated by the Rate Enrichment Pipeline (Feature 6).
+ * Set on OrderDTO.enrichedRate after enrichOrdersWithRates() runs.
+ */
+export interface SelectedRate {
+  carrierCode: string;
+  serviceCode: string;
+  /** Total rate in dollars (pre-markup). Post-markup cost added when Markup Chain ships. */
+  rate: number;
+  /** Timestamp when this rate was fetched from ShipStation. */
+  fetchedAt: Date;
+}
+
 export interface OrderDTO {
   orderId: number;
   orderNumber: string;
@@ -75,6 +90,30 @@ export interface OrderDTO {
   _enrichedWeight?: OrderWeight;
   _enrichedDims?: OrderDimensions;
   bestRate?: Rate;
+
+  // --- Rate Enrichment Pipeline fields (Feature 6) ---
+  /** Best rate selected by the enrichment pipeline. Set after enrichOrdersWithRates(). */
+  enrichedRate?: SelectedRate;
+  /** True once rate enrichment has been attempted for this order. */
+  ratesFetched?: boolean;
+  /** Error message if rate fetch failed. UI shows "rates unavailable" when set. */
+  rateError?: string;
+
+  // --- Billing Calculation fields (Feature 7) ---
+  /** Final calculated cost for this order (post markup, banker's rounding). */
+  calculatedCost?: number;
+  /** Full billing calculation breakdown for finance audit trail. */
+  billingCalculation?: BillingCalculation;
+
+  // --- Label / State Machine fields (Feature 8) ---
+  /** Label metadata — persisted when label is printed; triggers shipped state. */
+  label?: {
+    shippingNumber: string;   // Tracking number
+    labelUrl: string;         // Link to label PDF
+    carrierCode: string;      // 'USPS', 'UPS', 'FedEx'
+    createdAt: Date;
+    status: 'pending' | 'ready' | 'failed';
+  };
 }
 
 export type OrderStatus = 'awaiting_shipment' | 'shipped' | 'cancelled';
