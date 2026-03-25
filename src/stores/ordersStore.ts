@@ -5,6 +5,7 @@
 import { create } from 'zustand';
 import type { OrderDTO, OrderStatus } from '../types/orders';
 import { getMockOrdersByStatus } from '../api/mock-data';
+import { getMarkupRuleForCarrier, applyMarkup, type MarkupRule } from '../utils/markupService';
 import { getCachedOrFetchedRate } from '../utils/rateFetchCache';
 import { buildRateFetchRequest, type ClientCredentials } from '../api/rateService';
 
@@ -22,7 +23,6 @@ interface OrdersState {
   dateEnd: string | null;
   selectedOrderIds: Set<number>;
 
-  // Actions
   setStatus: (status: OrderStatus) => void;
   setPage: (page: number) => void;
   setSearchQuery: (query: string) => void;
@@ -31,29 +31,7 @@ interface OrdersState {
   selectAllOrders: () => void;
   clearSelection: () => void;
   fetchOrders: () => Promise<void>;
-
-  /**
-   * Enrich a batch of orders with the best available shipping rate.
-   *
-   * SCAFFOLD STATUS (Feature 6): Wired but returns stub rates until ShipStation
-   * API integration and credential storage are resolved.
-   *
-   * For each order:
-   *   1. Build a RateFetchRequest from order data
-   *   2. Call getCachedOrFetchedRate() (cache-first, then ShipStation)
-   *   3. Set order.enrichedRate and order.ratesFetched = true
-   *   4. Set order.rateError if fetch failed
-   *   5. Persist enriched orders to store
-   *
-   * TODO (Markup Chain): After Feature 4 ships, apply markup to enrichedRate.rate:
-   *   rate = bestRate.rate + (bestRate.rate × carrierMarkupPct) + residentialSurcharge
-   *
-   * @param orders - Orders to enrich (typically the current store page)
-   * @param clientId - Tenant identifier for credential lookup
-   * @param credentials - ShipStation API credentials (placeholder until storage ships)
-   * @param originZip - Origin warehouse ZIP code
-   * @param serviceCode - ShipStation service code for cache key
-   */
+  applyMarkupToOrders: (orders: OrderDTO[], clientId: string, rules: MarkupRule[]) => void;
   enrichOrdersWithRates: (
     orders: OrderDTO[],
     clientId: string,
@@ -81,14 +59,8 @@ export const useOrdersStore = create<OrdersState>((set, get) => ({
     set({ currentStatus: status, page: 1, selectedOrderIds: new Set() });
     get().fetchOrders();
   },
-
-  setPage: (page) => {
-    set({ page });
-    get().fetchOrders();
-  },
-
+  setPage: (page) => { set({ page }); get().fetchOrders(); },
   setSearchQuery: (query) => set({ searchQuery: query }),
-
   setDateRange: (start, end) => set({ dateStart: start, dateEnd: end }),
 
   toggleOrderSelection: (orderId) => set((state) => {
@@ -97,11 +69,9 @@ export const useOrdersStore = create<OrdersState>((set, get) => ({
     else next.add(orderId);
     return { selectedOrderIds: next };
   }),
-
   selectAllOrders: () => set((state) => ({
     selectedOrderIds: new Set(state.orders.map(o => o.orderId)),
   })),
-
   clearSelection: () => set({ selectedOrderIds: new Set() }),
 
   fetchOrders: async () => {
@@ -109,84 +79,63 @@ export const useOrdersStore = create<OrdersState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const result = getMockOrdersByStatus(currentStatus, page, pageSize);
-      set({
-        orders: result.orders,
-        total: result.total,
-        pages: result.pages,
-        loading: false,
-      });
+      set({ orders: result.orders, total: result.total, pages: result.pages, loading: false });
     } catch (err) {
       set({ loading: false, error: err instanceof Error ? err.message : 'Unknown error' });
     }
   },
 
-  enrichOrdersWithRates: async (
-    orders,
-    _clientId,
-    credentials = { apiKey: '', apiSecret: '' },
-    originZip = '92101',
-    serviceCode = 'usps_priority_mail',
-  ) => {
+  applyMarkupToOrders: (orders, clientId, rules) => {
     if (!orders || orders.length === 0) return;
+    const enriched: OrderDTO[] = orders.map((order): OrderDTO => {
+      const carrier = order.enrichedRate?.carrierCode ?? order.selectedCarrierCode ?? order.selectedRate?.carrierCode;
+      if (!carrier) {
+        console.warn('[ordersStore] applyMarkupToOrders: no carrier', { orderId: order.orderId });
+        return order;
+      }
+      const markupPercent = getMarkupRuleForCarrier(carrier, clientId, rules);
+      if (order.enrichedRate) {
+        return { ...order, enrichedRate: { ...order.enrichedRate, rate: applyMarkup(order.enrichedRate.rate, markupPercent) } };
+      }
+      if (order.selectedRate) {
+        const baseRate = order.selectedRate.shipmentCost ?? order.selectedRate.amount;
+        return { ...order, selectedRate: { ...order.selectedRate, amount: applyMarkup(baseRate, markupPercent) } };
+      }
+      return order;
+    });
+    set((state) => {
+      const map = new Map(enriched.map((o) => [o.orderId, o]));
+      return { orders: state.orders.map((o) => map.get(o.orderId) ?? o) };
+    });
+  },
 
+  enrichOrdersWithRates: async (orders, _clientId, credentials = { apiKey: '', apiSecret: '' }, originZip = '92101', serviceCode = 'usps_priority_mail') => {
+    if (!orders || orders.length === 0) return;
     const enriched: OrderDTO[] = await Promise.all(
       orders.map(async (order): Promise<OrderDTO> => {
-        const request = buildRateFetchRequest(
-          order,
-          order.selectedCarrierCode ?? 'stamps_com',
-          originZip,
-        );
-
+        const request = buildRateFetchRequest(order, order.selectedCarrierCode ?? 'stamps_com', originZip);
         if (!request) {
-          console.warn('[ordersStore] enrichOrdersWithRates: cannot build request', {
-            orderId: order.orderId,
-          });
-          return {
-            ...order,
-            ratesFetched: true,
-            rateError: 'Missing weight, dimensions, or destination ZIP',
-          };
+          console.warn('[ordersStore] enrichOrdersWithRates: cannot build request', { orderId: order.orderId });
+          return { ...order, ratesFetched: true, rateError: 'Missing weight, dimensions, or destination ZIP' };
         }
-
         try {
           const bestRate = await getCachedOrFetchedRate(request, credentials, serviceCode);
-
-          if (!bestRate) {
-            return { ...order, ratesFetched: true, rateError: 'No rates available' };
-          }
-
+          if (!bestRate) return { ...order, ratesFetched: true, rateError: 'No rates available' };
           return {
             ...order,
-            enrichedRate: {
-              carrierCode: bestRate.carrierCode,
-              serviceCode: bestRate.serviceCode,
-              rate: bestRate.rate,
-              // TODO (Markup Chain): rate = bestRate.rate + (bestRate.rate × markupPct) + residentialSurcharge
-              fetchedAt: new Date(),
-            },
+            enrichedRate: { carrierCode: bestRate.carrierCode, serviceCode: bestRate.serviceCode, rate: bestRate.rate, fetchedAt: new Date() },
             ratesFetched: true,
             rateError: undefined,
           };
         } catch (err) {
-          console.error('[ordersStore] enrichOrdersWithRates: fetch error', {
-            orderId: order.orderId,
-            error: err instanceof Error ? err.message : String(err),
-          });
-          return {
-            ...order,
-            ratesFetched: true,
-            rateError: err instanceof Error ? err.message : 'Rate fetch failed',
-          };
+          console.error('[ordersStore] enrichOrdersWithRates: fetch error', { orderId: order.orderId, error: err instanceof Error ? err.message : String(err) });
+          return { ...order, ratesFetched: true, rateError: err instanceof Error ? err.message : 'Rate fetch failed' };
         }
       }),
     );
-
-    // Merge enriched orders back into store, preserving orders not in this batch
     set((state) => {
-      const enrichedMap = new Map(enriched.map((o) => [o.orderId, o]));
-      return {
-        orders: state.orders.map((o) => enrichedMap.get(o.orderId) ?? o),
-      };
+      const map = new Map(enriched.map((o) => [o.orderId, o]));
+      return { orders: state.orders.map((o) => map.get(o.orderId) ?? o) };
     });
   },
 }));
