@@ -39,6 +39,23 @@ interface OrdersState {
     originZip?: string,
     serviceCode?: string,
   ) => Promise<void>;
+
+  /**
+   * Transition order status to 'shipped' after successful label creation.
+   * State machine: awaiting_shipment → shipped (triggered by label print)
+   */
+  markOrderAsShipped: (
+    orderId: string,
+    shippingNumber: string,
+    labelUrl: string,
+    carrierCode: string,
+  ) => void;
+
+  /**
+   * Record a label error for observability. Does NOT change order status.
+   * Leaves the order in its current state so the user can retry.
+   */
+  handleLabelError: (orderId: string, error: string) => void;
 }
 
 export const useOrdersStore = create<OrdersState>((set, get) => ({
@@ -138,4 +155,33 @@ export const useOrdersStore = create<OrdersState>((set, get) => ({
       return { orders: state.orders.map((o) => map.get(o.orderId) ?? o) };
     });
   },
+
+  markOrderAsShipped: (orderId, shippingNumber, labelUrl, carrierCode) => {
+    set((state) => ({
+      orders: state.orders.map((o) => {
+        if (String(o.orderId) !== String(orderId)) return o;
+        return {
+          ...o,
+          status: 'shipped' as const,
+          trackingNumber: shippingNumber,
+          labelCreated: new Date().toISOString(),
+          selectedCarrierCode: carrierCode,
+          label: {
+            shippingNumber,
+            labelUrl,
+            carrierCode,
+            createdAt: new Date(),
+            status: 'ready' as const,
+          },
+        };
+      }),
+    }));
+  },
+
+  handleLabelError: (orderId, error) => {
+    // Log for observability; order status is NOT changed
+    console.error('[ordersStore] handleLabelError', { orderId, error });
+    // Toast is surfaced by labelStore — no duplicate toasts here
+  },
 }));
+
