@@ -8,7 +8,14 @@ import { useOrderDetailStore } from '../../stores/orderDetailStore';
 import { useUIStore } from '../../stores/uiStore';
 import { fmtDate, fmtCurrency, fmtWeight, getOrderWeight } from '../../utils/orders';
 import type { OrderDTO } from '../../types/orders';
+import PrintLabelButton from '../PrintLabelButton';
 import styles from './OrderDetail.module.scss';
+
+// ─── Demo credentials (replace with real multi-tenant credential lookup) ──────
+const DEMO_CREDENTIALS = {
+  apiKey: import.meta.env.VITE_SHIPSTATION_API_KEY ?? '',
+  apiSecret: import.meta.env.VITE_SHIPSTATION_API_SECRET ?? '',
+};
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -111,7 +118,6 @@ export default function OrderDetail() {
   const isCancelled = order.status === 'cancelled';
 
   // ── Action handlers (stubs with toast feedback) ──
-  const handlePrintLabel = () => addToast(`Printing label for ${order.orderNumber}…`, 'info');
   const handleRefund = () => addToast(`Refund initiated for ${order.orderNumber}`, 'info');
   const handleCancel = () => addToast(`Cancel requested for ${order.orderNumber}`, 'info');
   const handleCopyTracking = () => {
@@ -272,13 +278,11 @@ export default function OrderDetail() {
 
         {/* ── Actions Footer ── */}
         <div className={styles.footer}>
-          <button
+          <PrintLabelButton
+            order={order}
+            credentials={DEMO_CREDENTIALS}
             className={`${styles.actionBtn} ${styles.primary}`}
-            onClick={handlePrintLabel}
-            disabled={isCancelled}
-          >
-            🖨 Print Label
-          </button>
+          />
           <button
             className={`${styles.actionBtn} ${styles.secondary}`}
             onClick={() => addToast(`Viewing order ${order.orderNumber}`, 'info')}
