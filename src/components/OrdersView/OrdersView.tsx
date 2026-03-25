@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { useOrdersStore } from '../../stores/ordersStore';
 import { useStoresStore } from '../../stores/storesStore';
 import { useMarkupsStore } from '../../stores/markupsStore';
+import { useOrderDetailStore } from '../../stores/orderDetailStore';
 import { ALL_COLUMNS } from '../Tables/columnDefs';
 import type { OrderDTO, OrderStatus } from '../../types/orders';
 import {
@@ -27,6 +28,7 @@ export default function OrdersView() {
   } = useOrdersStore();
   const { stores, statusCounts, fetchStores, fetchStatusCounts } = useStoresStore();
   const { markups } = useMarkupsStore();
+  const { openDetail } = useOrderDetailStore();
 
   useEffect(() => {
     fetchOrders();
@@ -174,13 +176,15 @@ export default function OrdersView() {
               {orders.map((order) => (
                 <tr
                   key={order.orderId}
-                  className={`${styles.tr} ${selectedOrderIds.has(order.orderId) ? styles.selected : ''}`}
+                  className={`${styles.tr} ${selectedOrderIds.has(order.orderId) ? styles.selected : ''} ${styles.clickableRow}`}
+                  onClick={() => openDetail(order.orderId)}
                 >
                   {visibleColumns.map((col) => (
                     <td
                       key={col.key}
                       className={styles.td}
                       style={{ width: col.width, maxWidth: col.width + 40 }}
+                      onClick={col.key === 'select' ? (e) => e.stopPropagation() : undefined}
                     >
                       {renderCell(order, col.key)}
                     </td>
