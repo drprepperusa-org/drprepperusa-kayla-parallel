@@ -1,0 +1,54 @@
+========================================
+WELCOME DJ — drprepperusa-v2 REFACTOR
+========================================
+
+Hi DJ! Albert's brought you on to unblock the next phase of development.
+
+HERE'S WHAT YOU NEED TO KNOW:
+
+1. **Your Job** (30 minutes)
+   - Answer 3 sets of questions about business logic (Markup, Billing, Label Creation)
+   - That's it. You don't code, you don't deploy.
+
+2. **What Happens Next** (Automatic)
+   - I (Kayla) spawn 3 agents to implement features in parallel
+   - 2–3 hours later, all features ship to production
+   - You review if interested, but implementation is my job
+
+3. **Read This First**
+   Full walkthrough: memory/handoffs/2026-03-24-DJ-QUICKSTART.md
+   (Open that file, read the 3 spec sections, answer in chat)
+
+4. **Key Links** (Remote-Accessible GitHub Docs)
+   - Live App: https://drprepperusa-kayla-parallel.vercel.app
+   - GitHub Repo: https://github.com/drprepperusa-org/drprepperusa-kayla-parallel
+   
+   ** MASTER BRANCH DOCS (Click to read online) **:
+   - REFACTOR-PLAN.md: https://github.com/drprepperusa-org/drprepperusa-kayla-parallel/blob/master/REFACTOR-PLAN.md
+   - FEATURE-IMPLEMENTATION-STATUS.md: https://github.com/drprepperusa-org/drprepperusa-kayla-parallel/blob/master/FEATURE-IMPLEMENTATION-STATUS.md
+   - TIER1-ORDER-DETAIL-LOG.md: https://github.com/drprepperusa-org/drprepperusa-kayla-parallel/blob/master/src/TIER1-ORDER-DETAIL-LOG.md
+   - TIER1-RESIDENTIAL-LOGIC-LOG.md: https://github.com/drprepperusa-org/drprepperusa-kayla-parallel/blob/master/src/TIER1-RESIDENTIAL-LOGIC-LOG.md
+   - TIER1-RATE-CACHE-LOG.md: https://github.com/drprepperusa-org/drprepperusa-kayla-parallel/blob/master/src/TIER1-RATE-CACHE-LOG.md
+
+5. **Current Status**
+   - Tier 1 (MVP): COMPLETE ✅ (Order Detail, Residential Inference, Rate Cache)
+   - Tier 2 (Business Logic): BLOCKED ⏳ (Waiting on your 3 specs)
+   - Timeline: 3–4 days once you answer
+
+6. **The 3 Specs You Need to Provide**
+   A) Markup Chain — How % markups & $ surcharges combine
+   B) Billing Formula — How order costs are calculated
+   C) Label State Machine — How label creation fits in order workflow
+
+   → All documented in DJ-QUICKSTART.md with templates & examples
+
+BOTTOM LINE:
+You answer questions → I automate everything else → team ships in days.
+
+Ready? Start with: DJ-QUICKSTART.md
+
+Questions? Ask in this chat. I'll clarify anything.
+
+Let's go! 🚀
+
+========================================
