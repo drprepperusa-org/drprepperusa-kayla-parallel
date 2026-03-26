@@ -24,8 +24,7 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { useOrdersStore } from '../stores/ordersStore';
-import { syncOrders } from '../services/syncService';
-import { createShipStationClient } from '../api/shipstationClient';
+import { syncViaProxy } from '../api/proxyClient';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -69,21 +68,6 @@ export interface UseAutoSyncReturn {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helper: create ShipStation client from env
-// ─────────────────────────────────────────────────────────────────────────────
-
-function createClientFromEnv() {
-  const keyV1 = (import.meta.env['SHIPSTATION_API_KEY_V1'] as string | undefined) ?? '';
-  const secretV1 = (import.meta.env['SHIPSTATION_API_SECRET_V1'] as string | undefined) ?? '';
-  const keyV2 = (import.meta.env['SHIPSTATION_API_KEY_V2'] as string | undefined) ?? '';
-
-  return createShipStationClient({
-    v1ApiKey: `${keyV1}:${secretV1}`,
-    v2ApiKey: keyV2,
-  });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // useAutoSync hook
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -111,8 +95,6 @@ export function useAutoSync(): UseAutoSyncReturn {
   const startSync = useOrdersStore((state) => state.startSync);
   const syncComplete = useOrdersStore((state) => state.syncComplete);
   const syncError = useOrdersStore((state) => state.syncError);
-  const markExternallyShipped = useOrdersStore((state) => state.markExternallyShipped);
-
   // ── Notification helper ──
   // Uses console.warn as a lightweight notification for now.
   // Production: wire to UIStore.addToast or a notification system.
@@ -154,54 +136,40 @@ export function useAutoSync(): UseAutoSyncReturn {
     startSync();
 
     try {
-      const client = createClientFromEnv();
-
-      // Read current state at call time (avoid stale closure)
-      const currentOrders = useOrdersStore.getState().allOrders;
+      // Read lastSyncTime at call time (not from closure — stale-closure prevention)
       const lastSyncTime = useOrdersStore.getState().sync.lastSyncTime;
+      const currentOrders = useOrdersStore.getState().allOrders;
 
-      const outcome = await syncOrders(
-        { lastSyncTime },
-        client,
-        currentOrders,
-      );
+      const outcome = await syncViaProxy(lastSyncTime);
 
       if (outcome.ok) {
-        const { result } = outcome;
+        const { data } = outcome;
+        const syncedAt = new Date(data.syncedAt);
 
-        // Update store
-        syncComplete(result.syncedAt, result.allOrders);
+        // Update store — proxy returns stats; pass current orders unchanged
+        syncComplete(syncedAt, currentOrders);
 
         // Reset failure count on success
         stateRef.current = {
           running: false,
           consecutiveFailures: 0,
-          lastAutoSyncAt: result.syncedAt,
+          lastAutoSyncAt: syncedAt,
           lastError: null,
         };
 
-        // Q6: wire external shipments into store + notify
-        if (result.externallyShipped.length > 0) {
-          // Mark each externally shipped order in the store (moves to shipped section)
-          for (const order of result.externallyShipped) {
-            const detectedAt = order.externallyShippedAt ?? result.syncedAt;
-            markExternallyShipped(order.id, detectedAt);
-          }
-
-          notifyExternalShipments(
-            result.externallyShipped.length,
-            result.externallyShipped.map((o) => o.id),
-          );
+        // Q6: notify if external shipments detected
+        if (data.externallyShipped > 0) {
+          notifyExternalShipments(data.externallyShipped, []);
         }
 
         console.info('[useAutoSync] Sync complete', {
-          newOrders: result.newOrders.length,
-          updatedOrders: result.updatedOrders.length,
-          externallyShipped: result.externallyShipped.length,
-          fetchedCount: result.fetchedCount,
+          newOrders: data.newOrders,
+          updatedOrders: data.updatedOrders,
+          externallyShipped: data.externallyShipped,
+          fetchedCount: data.fetchedCount,
         });
       } else {
-        const { error } = outcome;
+        const error = { message: outcome.error, code: outcome.code };
         const failures = state.consecutiveFailures + 1;
 
         // Exponential backoff: 30s, 60s, 120s, 240s, 300s (max)
@@ -251,7 +219,7 @@ export function useAutoSync(): UseAutoSyncReturn {
       console.error('[useAutoSync] Unexpected error', err);
     }
   // Stable deps only — store actions are stable Zustand refs
-  }, [startSync, syncComplete, syncError, markExternallyShipped, notifyExternalShipments]);
+  }, [startSync, syncComplete, syncError, notifyExternalShipments]);
 
   // ── Set up interval on mount ──
   useEffect(() => {

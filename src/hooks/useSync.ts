@@ -3,8 +3,7 @@
  * @description React hook for manual and scheduled sync of ShipStation orders.
  *
  * Wires to:
- * - src/services/syncService.ts (syncOrders)
- * - src/api/shipstationClient.ts (createShipStationClient)
+ * - src/api/proxyClient.ts (syncViaProxy) — server handles ShipStation V1 /orders
  * - OrdersStore.startSync / syncComplete / syncError (state management)
  *
  * Usage in ControlBar (Sync button):
@@ -24,8 +23,8 @@
 
 import { useState, useCallback } from 'react';
 import { useOrdersStore } from '../stores/ordersStore';
-import { syncOrders, type SyncServiceError } from '../services/syncService';
-import { createShipStationClient } from '../api/shipstationClient';
+import { SyncServiceError, type SyncServiceErrorCode } from '../services/syncService';
+import { syncViaProxy } from '../api/proxyClient';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Hook return type
@@ -120,79 +119,62 @@ export function useSync(): UseSyncReturn {
     // Signal store that sync started
     startSync();
 
-    // NOTE: PENDING — move to server-side proxy so keys are never in the browser bundle.
-    // See shipstationClient.ts for the security tracking comment.
-    const keyV1 = (import.meta.env['SHIPSTATION_API_KEY_V1'] as string | undefined) ?? '';
-    const secretV1 = (import.meta.env['SHIPSTATION_API_SECRET_V1'] as string | undefined) ?? '';
-    const keyV2 = (import.meta.env['SHIPSTATION_API_KEY_V2'] as string | undefined) ?? '';
-
-    const client = createShipStationClient({
-      v1ApiKey: `${keyV1}:${secretV1}`,
-      v2ApiKey: keyV2,
-    });
-
-    // KEY FIX: Read allOrders from store.getState() at call time — NOT from the
-    // useCallback closure. Closures capture a snapshot; getState() always returns
-    // the current store value, preventing stale-closure bugs in rapid sync scenarios.
-    const currentAllOrders = useOrdersStore.getState().allOrders;
+    // Read lastSyncTime at call time — not from closure (stale-closure prevention)
     const currentLastSyncTime = useOrdersStore.getState().sync.lastSyncTime;
 
-    const outcome = await syncOrders(
-      { lastSyncTime: currentLastSyncTime },
-      client,
-      currentAllOrders,
-    );
+    const outcome = await syncViaProxy(currentLastSyncTime);
 
     setLoading(false);
 
     if (outcome.ok) {
-      const { result } = outcome;
+      const { data } = outcome;
+      const syncedAt = new Date(data.syncedAt);
 
-      // Update the store — merges orders + sets lastSyncTime
-      syncComplete(result.syncedAt, result.allOrders);
+      // Update the store — proxy sync returns stats, not full order objects.
+      // Pass current allOrders unchanged (server handles merge on real integration).
+      const currentAllOrders = useOrdersStore.getState().allOrders;
+      syncComplete(syncedAt, currentAllOrders);
 
       setError(null);
       setLastSyncStats({
-        newOrders: result.newOrders.length,
-        updatedOrders: result.updatedOrders.length,
-        externallyShipped: result.externallyShipped.length,
-        fetchedCount: result.fetchedCount,
-        syncedAt: result.syncedAt,
+        newOrders: data.newOrders,
+        updatedOrders: data.updatedOrders,
+        externallyShipped: data.externallyShipped,
+        fetchedCount: data.fetchedCount,
+        syncedAt,
       });
 
-      if (result.externallyShipped.length > 0) {
-        console.warn('[useSync] Detected externally shipped orders (Q6 pending)', {
-          count: result.externallyShipped.length,
-          orderIds: result.externallyShipped.map((o) => o.id),
+      if (data.externallyShipped > 0) {
+        console.warn('[useSync] Detected externally shipped orders (Q6)', {
+          count: data.externallyShipped,
         });
       }
 
       console.info('[useSync] Sync complete', {
-        newOrders: result.newOrders.length,
-        updatedOrders: result.updatedOrders.length,
-        externallyShipped: result.externallyShipped.length,
-        fetchedCount: result.fetchedCount,
+        newOrders: data.newOrders,
+        updatedOrders: data.updatedOrders,
+        externallyShipped: data.externallyShipped,
+        fetchedCount: data.fetchedCount,
       });
     } else {
-      const serviceError = outcome.error;
+      const errorCode: SyncServiceErrorCode =
+        outcome.status === 401
+          ? 'AUTH_ERROR'
+          : outcome.status === 429
+          ? 'RATE_LIMITED'
+          : outcome.status >= 500
+          ? 'API_ERROR'
+          : 'API_ERROR';
+
+      const serviceError = new SyncServiceError(outcome.error, errorCode);
       setError(serviceError);
 
       // Signal store of error
       syncError(serviceError.message);
 
-      // If we got partial data, still update the store
-      if (serviceError.partialOrders && serviceError.partialOrders.length > 0) {
-        // Re-read current allOrders at this point (may have changed)
-        const latestOrders = useOrdersStore.getState().allOrders;
-        console.warn('[useSync] Partial sync — updating store with partial data', {
-          partialCount: serviceError.partialOrders.length,
-          error: serviceError.message,
-        });
-        syncComplete(new Date(), [...latestOrders, ...serviceError.partialOrders]);
-      }
-
       console.error('[useSync] Sync failed', {
         code: serviceError.code,
+        status: outcome.status,
         message: serviceError.message,
       });
     }
