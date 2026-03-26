@@ -95,15 +95,34 @@ Options:
 
 ---
 
+## Q7: BillingCalculation Workflow (HIGH PRIORITY)
+
+**Question**: How and when should BillingCalculation be populated?
+
+**From spec**: Order has optional `billing` field (BillingCalculation object)
+
+- When is billing calculated?
+  - When rates are fetched (before label creation)?
+  - When label is created (after user confirms carrier)?
+  - On sync/update?
+  - On-demand per order?
+- Should billing persist in database or computed on-demand?
+- Does billing calculation trigger when markup rules change?
+- Should billing be displayed in the order table or only in the detail panel?
+- If a label is voided, should the billing record be cleared?
+
+---
+
 ## Summary
 
-**Once these 6 are answered, we can**:
+**Once these 7 are answered, we can**:
 1. Lock immutable ShipStation data mapping (Q1)
 2. Build Batch Panel UI (Q2)
 3. Build SKU Sort grouping (Q3)
 4. Build Labels button functionality (Q4)
 5. Build Print Queue workflow (Q5)
 6. Build incremental sync with external detection (Q6)
+7. Wire BillingCalculation into Zustand + BillingService (Q7)
 
 **Estimated answers needed by**: Before implementation strategy review
 
