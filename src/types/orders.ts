@@ -157,8 +157,26 @@ export interface Order {
 
   status: OrderStatus;
 
-  /** True if the order was shipped outside this app (Q6 heuristic). */
+  /**
+   * True if the order was shipped outside this app.
+   *
+   * Q6 (DJ, locked): "An order is considered externally shipped if it's been
+   * shipped OUTSIDE of prepship OR shipstation. If there are shipstation records
+   * then it is considered shipped within shipstation. If shipstation has no records
+   * AND we didn't ship out of prepship, then it is considered externally shipped."
+   *
+   * Detection logic (see syncService.detectExternallyShipped):
+   *   - ShipStation label exists? → NOT externally shipped (shipped within SS)
+   *   - prepship.shipped === true? → NOT externally shipped (shipped within prepship)
+   *   - Neither? → externallyShipped = true
+   */
   externallyShipped: boolean;
+
+  /**
+   * Timestamp when external shipment was first detected.
+   * Set by detectExternallyShipped() during sync — undefined until detected.
+   */
+  externallyShippedAt?: Date;
 
   /** Label created for this order (undefined until printed). */
   label?: OrderLabel;
