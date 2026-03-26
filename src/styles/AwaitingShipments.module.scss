@@ -1,0 +1,707 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// AwaitingShipments.module.scss
+// Grid layout: [banner?] [tabs] [header] [body = table + right-panel] [footer]
+// Right panel is sticky / fixed width (400px)
+// Zoom applies to table content only; header/footer/right-panel are perimeter-fixed
+// ─────────────────────────────────────────────────────────────────────────────
+
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: #f8f9fa;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+// ── Selection Banner ─────────────────────────────────────────────────────────
+
+.banner {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: #1a73e8;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+
+  .bannerText {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .bannerClose {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    line-height: 1;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+  }
+}
+
+// ── Status Tabs ──────────────────────────────────────────────────────────────
+
+.tabs {
+  display: flex;
+  gap: 0;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 0 16px;
+  flex-shrink: 0;
+}
+
+.tab {
+  padding: 10px 20px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: #666;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+  margin-bottom: -1px;
+  white-space: nowrap;
+
+  &:hover {
+    color: #1a73e8;
+  }
+}
+
+.tabActive {
+  color: #1a73e8;
+  border-bottom-color: #1a73e8;
+}
+
+// ── Header (ControlBar) ──────────────────────────────────────────────────────
+
+.header {
+  flex-shrink: 0;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 8px 12px;
+}
+
+// ── Body (Table + Right Panel) ───────────────────────────────────────────────
+
+.body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.tableArea {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  min-width: 0;
+}
+
+.tableZoomWrapper {
+  transform-origin: top left;
+  // zoom level is applied inline via style prop
+}
+
+.rightPanelArea {
+  width: 400px;
+  min-width: 400px;
+  flex-shrink: 0;
+  background: #fff;
+  border-left: 1px solid #e0e0e0;
+  overflow-y: auto;
+  position: sticky;
+  top: 0;
+  height: 100%;
+}
+
+// ── Footer (Pagination) ──────────────────────────────────────────────────────
+
+.footer {
+  flex-shrink: 0;
+  background: #fff;
+  border-top: 1px solid #e0e0e0;
+  padding: 6px 12px;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ControlBar
+// ─────────────────────────────────────────────────────────────────────────────
+
+.controlBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.searchInput {
+  padding: 6px 10px;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  font-size: 13px;
+  width: 220px;
+  outline: none;
+  transition: border-color 0.15s;
+
+  &:focus {
+    border-color: #1a73e8;
+    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.15);
+  }
+}
+
+.controlSelect {
+  padding: 6px 10px;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  font-size: 13px;
+  background: #fff;
+  cursor: pointer;
+  outline: none;
+  max-width: 180px;
+  min-width: 100px;
+
+  &:focus {
+    border-color: #1a73e8;
+  }
+}
+
+.controlButton {
+  padding: 6px 12px;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  font-size: 13px;
+  background: #fff;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+
+  &:hover {
+    background: #f5f5f5;
+    border-color: #bbb;
+  }
+
+  &:active {
+    background: #e8e8e8;
+  }
+}
+
+.controlButtonPrimary {
+  @extend .controlButton;
+  background: #1a73e8;
+  color: #fff;
+  border-color: #1a73e8;
+
+  &:hover {
+    background: #1557b0;
+    border-color: #1557b0;
+  }
+}
+
+.columnsDropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.columnsMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: #fff;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  z-index: 200;
+  min-width: 200px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.columnMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.1s;
+
+  &:hover {
+    background: #f5f5f5;
+  }
+
+  input[type='checkbox'] {
+    cursor: pointer;
+    accent-color: #1a73e8;
+  }
+}
+
+.zoomGroup {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.zoomButton {
+  padding: 6px 10px;
+  border: none;
+  background: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.1s;
+  border-right: 1px solid #d0d0d0;
+
+  &:last-child {
+    border-right: none;
+  }
+
+  &:hover {
+    background: #f0f4ff;
+  }
+}
+
+.zoomButtonActive {
+  background: #e8f0fe;
+  color: #1a73e8;
+  font-weight: 600;
+}
+
+.controlSpacer {
+  flex: 1;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OrdersTable
+// ─────────────────────────────────────────────────────────────────────────────
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  table-layout: fixed;
+}
+
+.thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #f5f5f5;
+}
+
+.th {
+  padding: 8px 10px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 12px;
+  color: #555;
+  border-bottom: 2px solid #e0e0e0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+}
+
+.thSelect {
+  width: 40px;
+  padding: 8px 6px;
+  text-align: center;
+}
+
+.td {
+  padding: 7px 10px;
+  border-bottom: 1px solid #f0f0f0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #333;
+}
+
+.tdSelect {
+  padding: 7px 6px;
+  text-align: center;
+}
+
+.tr {
+  cursor: pointer;
+  transition: background 0.1s;
+
+  &:hover {
+    background: #f0f4ff;
+  }
+}
+
+.trSelected {
+  background: #e8f0fe !important;
+
+  .td {
+    color: #1a73e8;
+  }
+}
+
+.trCheckboxSelected {
+  background: #fff8e1 !important;
+}
+
+.emptyState {
+  text-align: center;
+  padding: 60px 20px;
+  color: #999;
+  font-size: 14px;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RightPanel
+// ─────────────────────────────────────────────────────────────────────────────
+
+.rightPanelEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 300px;
+  color: #bbb;
+  font-size: 14px;
+  text-align: center;
+  padding: 24px;
+  gap: 12px;
+
+  .emptyIcon {
+    font-size: 40px;
+    opacity: 0.4;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ShippingPanel
+// ─────────────────────────────────────────────────────────────────────────────
+
+.shippingPanel {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.panelTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: #222;
+}
+
+.panelOrderNum {
+  font-size: 12px;
+  color: #888;
+}
+
+.panelSection {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.panelSectionTitle {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #888;
+  margin-bottom: 2px;
+}
+
+.panelRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  font-size: 13px;
+  color: #444;
+
+  .panelLabel {
+    color: #888;
+    flex-shrink: 0;
+    margin-right: 8px;
+  }
+
+  .panelValue {
+    text-align: right;
+    word-break: break-word;
+  }
+}
+
+.panelItemList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.panelItem {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #555;
+  padding: 4px 8px;
+  background: #f9f9f9;
+  border-radius: 4px;
+
+  .panelItemSku {
+    color: #999;
+    font-size: 11px;
+  }
+}
+
+.panelRatesPlaceholder {
+  background: #f5f5f5;
+  border: 1px dashed #d0d0d0;
+  border-radius: 6px;
+  padding: 16px;
+  text-align: center;
+  color: #999;
+  font-size: 13px;
+}
+
+.panelTrackingBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #e8f5e9;
+  color: #2e7d32;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.panelBillingBreakdown {
+  font-size: 12px;
+  color: #666;
+  background: #fafafa;
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+  padding: 8px 10px;
+  line-height: 1.6;
+}
+
+.panelActions {
+  display: flex;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #f0f0f0;
+
+  button {
+    flex: 1;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: not-allowed;
+    opacity: 0.5;
+    border: 1px solid #d0d0d0;
+    background: #fff;
+  }
+
+  .primaryBtn {
+    background: #1a73e8;
+    color: #fff;
+    border-color: #1a73e8;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BatchPanel
+// ─────────────────────────────────────────────────────────────────────────────
+
+.batchPanel {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.batchSummary {
+  background: #e8f0fe;
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.batchSummaryTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a73e8;
+}
+
+.batchSummaryMeta {
+  font-size: 13px;
+  color: #555;
+}
+
+.batchOrderList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.batchOrderItem {
+  font-size: 12px;
+  padding: 5px 10px;
+  background: #fafafa;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  color: #555;
+}
+
+.batchPlaceholder {
+  background: #f5f5f5;
+  border: 1px dashed #d0d0d0;
+  border-radius: 6px;
+  padding: 20px;
+  text-align: center;
+  color: #aaa;
+  font-size: 13px;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pagination
+// ─────────────────────────────────────────────────────────────────────────────
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.paginationLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.paginationInfo {
+  font-size: 13px;
+  color: #666;
+}
+
+.paginationButton {
+  padding: 5px 10px;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.1s;
+
+  &:hover:not(:disabled) {
+    background: #f5f5f5;
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+.paginationRight {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pageSizeGroup {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.pageSizeButton {
+  padding: 5px 10px;
+  border: none;
+  border-right: 1px solid #d0d0d0;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.1s;
+
+  &:last-child {
+    border-right: none;
+  }
+
+  &:hover {
+    background: #f0f4ff;
+  }
+}
+
+.pageSizeButtonActive {
+  background: #e8f0fe;
+  color: #1a73e8;
+  font-weight: 600;
+}
+
+.paginationDisplayRange {
+  font-size: 13px;
+  color: #888;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Responsive
+// ─────────────────────────────────────────────────────────────────────────────
+
+@media (max-width: 768px) {
+  .body {
+    flex-direction: column;
+  }
+
+  .rightPanelArea {
+    width: 100%;
+    min-width: 0;
+    border-left: none;
+    border-top: 1px solid #e0e0e0;
+    height: 300px;
+  }
+
+  .controlBar {
+    flex-wrap: wrap;
+  }
+
+  .searchInput {
+    width: 100%;
+  }
+
+  .pagination {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
