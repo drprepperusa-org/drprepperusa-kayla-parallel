@@ -19,6 +19,37 @@
  * const rates = await client.v1.get<ShipStationRateItem[]>('/shipments/getrates', { body: payload });
  * const label = await client.v2.post<ShipStationV2LabelResponse>('/labels', labelPayload);
  * ```
+ *
+ * ---------------------------------------------------------------------------
+ * API KEY LIFECYCLE — SECURITY MIGRATION PATH
+ * ---------------------------------------------------------------------------
+ *
+ * CURRENT STATE (client-side, PENDING proxy migration):
+ *   API keys are read from browser-accessible environment variables:
+ *     - import.meta.env.PUBLIC_SHIPSTATION_API_KEY_V1
+ *     - import.meta.env.PUBLIC_SHIPSTATION_API_KEY_V2
+ *   This exposes credentials in the browser bundle. Acceptable only for
+ *   internal/trusted deployments during the development phase.
+ *
+ * FUTURE STATE (server-side proxy only):
+ *   All ShipStation API calls will route through server-side proxy endpoints:
+ *     - POST /api/rates   → proxies to ShipStation V1 /shipments/getrates
+ *     - POST /api/labels  → proxies to ShipStation V2 /labels
+ *     - GET  /api/sync    → proxies to ShipStation V1 /orders
+ *   API keys will be held in server-side environment variables (SHIPSTATION_API_KEY_V1,
+ *   SHIPSTATION_API_SECRET_V1, etc.) — never exposed to the browser bundle.
+ *   This client file will be used only server-side (e.g., Astro API routes).
+ *
+ * MIGRATION PATH:
+ *   1. Implement proxy endpoints in src/pages/api/ (Astro server routes)
+ *   2. Update hooks (useRates, useCreateLabel, useSync) to POST /api/* instead
+ *      of constructing a client-side ShipStationClient directly
+ *   3. Remove PUBLIC_ prefix from env vars (move to server-only)
+ *   4. Delete client-side import.meta.env reads from hook layer
+ *   5. Validate no API keys appear in the browser bundle (check build output)
+ *
+ * See: src/hooks/useRates.ts — already migrated to POST /api/rates proxy
+ * ---------------------------------------------------------------------------
  */
 
 // ─────────────────────────────────────────────────────────────────────────────

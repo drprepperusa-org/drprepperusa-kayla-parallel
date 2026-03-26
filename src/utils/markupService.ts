@@ -74,8 +74,8 @@ export function getMarkupRuleForCarrier(
  * Formula: result = baseRate × (1 + markupPercent / 100)
  * Example: $100 × 1.15 = $115.00
  *
- * Uses banker's rounding (round half to even) via toFixed(2) for
- * financial precision.
+ * Uses standard round-half-up rounding (Math.round) to 2 decimal places
+ * for financial precision.
  *
  * @param baseRate      - The rate before markup (in dollars). Must be ≥ 0.
  * @param markupPercent - Markup percentage (e.g., 15 for 15%). Must be ≥ 0.

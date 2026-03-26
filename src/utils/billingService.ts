@@ -25,7 +25,7 @@ export interface BillingCalculation {
   totalCost: number;
   calculatedAt: Date;
   /** Always 'bankers_rounding' — IEEE 754 round-half-to-even */
-  precision: string;
+  precision: 'bankers_rounding';
 }
 
 // ---------------------------------------------------------------------------

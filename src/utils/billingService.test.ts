@@ -257,3 +257,51 @@ describe('calculateBillingCost — audit trail', () => {
     expect(result.calculatedAt.getTime()).toBeLessThanOrEqual(after);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Double-rounding consistency — subtotal + markupAmount ≈ totalCost
+// ---------------------------------------------------------------------------
+// Both markupAmount and totalCost are rounded independently (double-rounding).
+// This suite verifies the two rounded values stay within 1 cent of their sum.
+// A tolerance of 0.005 covers maximum possible banker's rounding drift per field.
+
+describe('calculateBillingCost — double-rounding consistency', () => {
+  const TOLERANCE = 0.005; // 0.5 cents — max drift from two independent roundings
+
+  it('Test Case A: subtotal + markupAmount ≈ totalCost (within 1 cent)', () => {
+    const result = calculateBillingCost(100, 3, 15);
+    const diff = Math.abs(result.subtotal + result.markupAmount - result.totalCost);
+    expect(diff).toBeLessThanOrEqual(TOLERANCE);
+  });
+
+  it('Test Case B: subtotal + markupAmount ≈ totalCost (within 1 cent)', () => {
+    const result = calculateBillingCost(50, 0, 10);
+    const diff = Math.abs(result.subtotal + result.markupAmount - result.totalCost);
+    expect(diff).toBeLessThanOrEqual(TOLERANCE);
+  });
+
+  it('Test Case C: subtotal + markupAmount ≈ totalCost (within 1 cent)', () => {
+    const result = calculateBillingCost(200, 5, 20);
+    const diff = Math.abs(result.subtotal + result.markupAmount - result.totalCost);
+    expect(diff).toBeLessThanOrEqual(TOLERANCE);
+  });
+
+  it('fractional surcharge case: subtotal + markupAmount ≈ totalCost', () => {
+    // $100 + $2.50 × 1.15 = 102.50 × 1.15 = 117.875 (rounds to 117.88)
+    const result = calculateBillingCost(100, 2.50, 15);
+    const diff = Math.abs(result.subtotal + result.markupAmount - result.totalCost);
+    expect(diff).toBeLessThanOrEqual(TOLERANCE);
+  });
+
+  it('large amount: subtotal + markupAmount ≈ totalCost (within 1 cent)', () => {
+    const result = calculateBillingCost(10000, 500, 15);
+    const diff = Math.abs(result.subtotal + result.markupAmount - result.totalCost);
+    expect(diff).toBeLessThanOrEqual(TOLERANCE);
+  });
+
+  it('zero markup: subtotal + markupAmount equals totalCost exactly', () => {
+    const result = calculateBillingCost(100, 5, 0);
+    const diff = Math.abs(result.subtotal + result.markupAmount - result.totalCost);
+    expect(diff).toBeLessThanOrEqual(TOLERANCE);
+  });
+});
