@@ -19,10 +19,10 @@ import {
   LabelError,
   __setFetchFn,
   __resetFetchFn,
-  __decodeBasicAuth,
   type LabelRequest,
   type ClientCredentials,
 } from './labelService';
+import { decodeBasicAuth as __decodeBasicAuth } from '../__tests__/utilities/decode-basic-auth';
 
 // ─── Test fixtures ────────────────────────────────────────────────────────────
 

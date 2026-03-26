@@ -16,7 +16,7 @@
 |------|---------|
 | `src/api/rateService.ts` | ShipStation rate fetching service + rate selection + request builder |
 | `src/utils/rateFetchCache.ts` | In-memory rate cache layer (Tier 1 cache key format) |
-| `src/hooks/useRates.ts` | React Query hooks: `useOrderRates`, `useRefreshRates`, `useEnrichOrdersWithRates` |
+| `src/hooks/useRates.ts` | Standard React hook: `useRates(orderId)` — returns `{ rates, loading, error, refresh }` |
 | `src/api/rateService.test.ts` | 25 unit tests (validation, stub, selectBestRate, buildRateFetchRequest) |
 | `src/utils/rateFetchCache.test.ts` | 16 unit tests (cache hit, miss, null, invalidation, invalid params) |
 

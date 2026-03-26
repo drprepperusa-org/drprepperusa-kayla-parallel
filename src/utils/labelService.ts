@@ -107,12 +107,7 @@ function buildBasicAuthHeader(apiKey: string, apiSecret: string): string {
   return `Basic ${token}`;
 }
 
-function decodeBasicAuth(authHeader: string): string {
-  return atob(authHeader.replace('Basic ', ''));
-}
-
-// Export for test use only
-export { decodeBasicAuth as __decodeBasicAuth };
+// decodeBasicAuth has been moved to src/__tests__/utilities/decode-basic-auth.ts (test only).
 
 interface ShipStationShipmentPayload {
   carrierCode: string;
