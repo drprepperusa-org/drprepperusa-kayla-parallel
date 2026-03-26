@@ -64,6 +64,11 @@ export default function PrintLabelButton({
   const handleClick = async () => {
     if (isLoading) return;
 
+    // TODO: Once warehouse config is in Zustand, read from store instead of env.
+    // PENDING: Move to warehouseStore for multi-tenant warehouse configuration.
+    // WARNING: VITE_ORIGIN_ZIP is a build-time env var — not secret, just config.
+    const originZip: string = (import.meta.env['VITE_ORIGIN_ZIP'] as string | undefined) ?? '92101';
+
     // Build label request from order data
     const request: LabelRequest = {
       orderId,
@@ -71,7 +76,7 @@ export default function PrintLabelButton({
       carrierCode: order.selectedCarrierCode ?? order.selectedRate?.carrierCode ?? 'stamps_com',
       weight: order._enrichedWeight?.value ?? order.weight?.value ?? 16,
       dimensions: order._enrichedDims ?? order.dimensions ?? { length: 6, width: 4, height: 2 },
-      originZip: '92101',   // TODO: pull from client/store config
+      originZip,
       destinationZip: order.shipTo?.postalCode ?? '',
       residentialFlag: order.residential ?? false,
       shipFromAddress: {
@@ -79,7 +84,7 @@ export default function PrintLabelButton({
         street1: '123 Warehouse Dr',
         city: 'San Diego',
         state: 'CA',
-        postalCode: '92101',
+        postalCode: originZip,
         country: 'US',
       },
       shipToAddress: order.shipTo ?? {},
