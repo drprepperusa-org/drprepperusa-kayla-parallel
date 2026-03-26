@@ -3,11 +3,12 @@
  */
 
 import { create } from 'zustand';
-import type { OrderDTO, OrderStatus, Order, OrderId, OrderLabel } from '../types/orders';
+import type { OrderDTO, OrderStatus, Order, OrderId, OrderLabel, BillingCalculation } from '../types/orders';
 import { getMockOrdersByStatus } from '../api/mock-data';
 import { getMarkupRuleForCarrier, applyMarkup, type MarkupRule } from '../utils/markupService';
 import { getCachedOrFetchedRate } from '../utils/rateFetchCache';
 import { buildRateFetchRequest, type ClientCredentials } from '../api/rateService';
+import { calculateBilling } from '../services/billingService';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Sync state shape
@@ -69,6 +70,24 @@ interface OrdersState {
     originZip?: string,
     serviceCode?: string,
   ) => Promise<void>;
+
+  // ── Actions: billing ──────────────────────────────────────────────────────
+  /**
+   * Calculate order costs and store the result on the canonical Order in allOrders.
+   *
+   * Re-wired from PR #8 — was lost in merge conflict.
+   *
+   * @param orderId - Internal order ID (Order.id)
+   * @param baseRate - Raw carrier rate in USD
+   * @param residential - Whether the delivery is residential (adds surcharge)
+   * @param markupPercent - Client markup percentage (e.g. 15 = 15%)
+   */
+  calculateOrderCosts: (
+    orderId: string,
+    baseRate: number,
+    residential: boolean,
+    markupPercent: number,
+  ) => BillingCalculation | null;
 
   // ── Actions: label state machine ──────────────────────────────────────────
   /**
@@ -258,6 +277,40 @@ export const useOrdersStore = create<OrdersState>((set, get) => ({
     // Log for observability; order status is NOT changed
     console.error('[ordersStore] handleLabelError', { orderId, error });
     // Toast is surfaced by labelStore — no duplicate toasts here
+  },
+
+  // ── calculateOrderCosts: billing calculation ───────────────────────────────
+  // Re-wired from PR #8 — was lost in merge conflict.
+  calculateOrderCosts: (orderId, baseRate, residential, markupPercent) => {
+    // Residential surcharge: $4.40 (standard USPS/UPS residential fee)
+    const residentialSurcharge = residential ? 4.40 : 0;
+
+    const result = calculateBilling({
+      baseRate,
+      residentialSurcharge,
+      carrierMarkupPercent: markupPercent,
+      context: `orderId:${orderId}`,
+    });
+
+    if (!result.ok) {
+      console.error('[ordersStore] calculateOrderCosts: billing error', {
+        orderId,
+        error: result.error.message,
+        code: result.error.code,
+      });
+      return null;
+    }
+
+    const billing: BillingCalculation = result.calculation;
+
+    set((state) => ({
+      allOrders: state.allOrders.map((o) => {
+        if (o.id !== orderId) return o;
+        return { ...o, billing };
+      }),
+    }));
+
+    return billing;
   },
 
   // ── addLabel: attach OrderLabel to canonical Order ─────────────────────────

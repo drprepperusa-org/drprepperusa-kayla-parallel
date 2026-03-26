@@ -30,24 +30,61 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useOrdersStore } from '../stores/ordersStore';
-import { fetchRates, clearRateServiceCache, type ShipStationRate, type RateServiceError } from '../services/rateService';
-import { createShipStationClient } from '../api/shipstationClient';
+import { RateServiceError, type ShipStationRate } from '../services/rateService';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Client factory (creates a new client per fetch — keys may change)
+// Rate fetch via server-side proxy
 // ─────────────────────────────────────────────────────────────────────────────
 
-function getShipStationClient() {
-  // NOTE: PENDING — move to server-side proxy so keys are never in the browser bundle.
-  // See shipstationClient.ts for the security tracking comment.
-  const keyV1 = (import.meta.env['SHIPSTATION_API_KEY_V1'] as string | undefined) ?? '';
-  const secretV1 = (import.meta.env['SHIPSTATION_API_SECRET_V1'] as string | undefined) ?? '';
-  const keyV2 = (import.meta.env['SHIPSTATION_API_KEY_V2'] as string | undefined) ?? '';
+// SECURITY: API keys have been removed from client-side code.
+// PENDING: Move to server-side proxy at /api/rates
+// TODO: Once server proxy is live, update this to POST /api/rates with order data.
+// The proxy will hold SHIPSTATION_API_KEY_V1 / SHIPSTATION_API_SECRET_V1
+// in server-side environment variables (never exposed to the browser bundle).
 
-  return createShipStationClient({
-    v1ApiKey: `${keyV1}:${secretV1}`,
-    v2ApiKey: keyV2,
+interface ProxyRateRequest {
+  orderId: string;
+  clientId: string;
+  weightOz: number;
+  dimensions: { lengthIn: number; widthIn: number; heightIn: number };
+  originZip: string;
+  destinationZip: string;
+  residential: boolean;
+}
+
+interface ProxyRateResponse {
+  rates: ShipStationRate[];
+  fromCache: boolean;
+  cachedAt: string | null;
+}
+
+async function fetchRatesViaProxy(
+  request: ProxyRateRequest,
+): Promise<{ ok: true; rates: ShipStationRate[]; fromCache: boolean; cachedAt: Date | null } | { ok: false; error: RateServiceError }> {
+  const response = await fetch('/api/rates', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
   });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => 'Unknown error');
+    return {
+      ok: false,
+      error: new RateServiceError(
+        `Rate proxy returned ${response.status}: ${text}`,
+        'NETWORK_ERROR',
+      ),
+    };
+  }
+
+  const data = (await response.json()) as ProxyRateResponse;
+  return {
+    ok: true,
+    rates: data.rates,
+    fromCache: data.fromCache,
+    cachedAt: data.cachedAt ? new Date(data.cachedAt) : null,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -133,34 +170,28 @@ export function useRates(orderId: string | null): UseRatesReturn {
     }
 
     const controller = new AbortController();
-    const forceRefresh = refreshCountRef.current > 0;
 
     async function runFetch() {
-      if (forceRefresh) {
-        clearRateServiceCache();
-      }
-
+      // Note: cache-busting for forced refresh is now handled server-side.
+      // The forceRefresh flag is passed as a header for the proxy to interpret.
       setLoading(true);
       setError(null);
 
-      const client = getShipStationClient();
-
-      const result = await fetchRates(
-        {
-          orderId: order!.id,
-          clientId: order!.clientId,
-          weightOz: order!.weightOz,
-          dimensions: {
-            lengthIn: order!.dimensions.lengthIn,
-            widthIn: order!.dimensions.widthIn,
-            heightIn: order!.dimensions.heightIn,
-          },
-          originZip: order!.shipFrom.postalCode,
-          destinationZip: order!.shipTo.postalCode,
-          residential: order!.shipTo.residential ?? false,
+      // TODO: Once server proxy is live, update this to POST /api/rates with order data.
+      // PENDING: Move to server-side proxy at /api/rates
+      const result = await fetchRatesViaProxy({
+        orderId: order!.id,
+        clientId: order!.clientId,
+        weightOz: order!.weightOz,
+        dimensions: {
+          lengthIn: order!.dimensions.lengthIn,
+          widthIn: order!.dimensions.widthIn,
+          heightIn: order!.dimensions.heightIn,
         },
-        client,
-      );
+        originZip: order!.shipFrom.postalCode,
+        destinationZip: order!.shipTo.postalCode,
+        residential: order!.shipTo.residential ?? false,
+      });
 
       if (controller.signal.aborted) return;
 

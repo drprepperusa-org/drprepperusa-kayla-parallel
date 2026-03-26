@@ -11,10 +11,16 @@ import type { OrderDTO } from '../../types/orders';
 import PrintLabelButton from '../PrintLabelButton';
 import styles from './OrderDetail.module.scss';
 
-// ─── Demo credentials (replace with real multi-tenant credential lookup) ──────
+// SECURITY: API credentials have been removed from client-side code.
+// PENDING: Move to server-side proxy at /api/labels
+// TODO: Once server proxy is live, update this to POST /api/labels with order data.
+// The proxy will hold VITE_SHIPSTATION_API_KEY / VITE_SHIPSTATION_API_SECRET
+// in server-side environment variables (never exposed to the browser bundle).
+//
+// PrintLabelButton now calls /api/labels directly (no credentials needed here).
 const DEMO_CREDENTIALS = {
-  apiKey: import.meta.env.VITE_SHIPSTATION_API_KEY ?? '',
-  apiSecret: import.meta.env.VITE_SHIPSTATION_API_SECRET ?? '',
+  apiKey: '',
+  apiSecret: '',
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

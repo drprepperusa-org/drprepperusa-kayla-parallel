@@ -163,6 +163,9 @@ export interface Order {
   /** Label created for this order (undefined until printed). */
   label?: OrderLabel;
 
+  /** Billing calculation result (populated by calculateOrderCosts action). */
+  billing?: BillingCalculation;
+
   notes?: string;
 }
 
