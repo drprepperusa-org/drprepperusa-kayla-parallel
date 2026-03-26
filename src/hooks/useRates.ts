@@ -1,96 +1,195 @@
 /**
- * useRates.ts — React Query hooks for rate enrichment
+ * @file useRates.ts
+ * @description React hook for fetching shipping rates for an order.
  *
- * SCAFFOLD STATUS: Rate Enrichment Pipeline (Feature 6)
- * -------------------------------------------------------
- * These hooks are wired but non-functional until:
- *   1. ShipStation API stub in rateService.ts is replaced with real call
- *   2. Client credential storage strategy is resolved
+ * Wires to:
+ * - src/services/rateService.ts (fetchRates)
+ * - src/api/shipstationClient.ts (createShipStationClient)
+ * - OrdersStore (read order by ID from allOrders)
  *
- * NOTE: Requires @tanstack/react-query v5 (QueryClientProvider in app root).
+ * Usage in ShippingPanel (Fetch Rates button):
+ * ```tsx
+ * const { rates, loading, error, refresh } = useRates(orderId);
+ *
+ * return (
+ *   <button onClick={refresh} disabled={loading}>
+ *     {loading ? 'Fetching...' : 'Fetch Rates'}
+ *   </button>
+ *   {rates.map(r => <RateRow key={r.serviceCode} rate={r} />)}
+ * );
+ * ```
+ *
+ * Cache: 30min in-memory TTL via rateService cache.
+ * Fetch on mount: yes (when orderId is provided and order has required data).
+ *
+ * FIX: doFetch logic is inlined directly into useEffect — no useCallback wrapper.
+ * This eliminates the diamond dependency pattern (useCallback depends on orderId/order,
+ * useEffect depends on doFetch, which effectively means both depend on orderId/order
+ * through two hops). Inlining is cleaner and avoids the intermediate cache miss.
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useOrdersStore } from '../stores/ordersStore';
-import { getCachedOrFetchedRate, clearRateCache } from '../utils/rateFetchCache';
-import { buildRateFetchRequest, type ShipStationRate, type ClientCredentials } from '../api/rateService';
+import { fetchRates, clearRateServiceCache, type ShipStationRate, type RateServiceError } from '../services/rateService';
+import { createShipStationClient } from '../api/shipstationClient';
 
-// Credential resolver placeholder
-// TODO: Replace with real lookup from auth store or backend
-function getClientCredentials(_clientId: string): ClientCredentials {
-  return { apiKey: '', apiSecret: '' };
+// ─────────────────────────────────────────────────────────────────────────────
+// Client factory (creates a new client per fetch — keys may change)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function getShipStationClient() {
+  // NOTE: PENDING — move to server-side proxy so keys are never in the browser bundle.
+  // See shipstationClient.ts for the security tracking comment.
+  const keyV1 = (import.meta.env['SHIPSTATION_API_KEY_V1'] as string | undefined) ?? '';
+  const secretV1 = (import.meta.env['SHIPSTATION_API_SECRET_V1'] as string | undefined) ?? '';
+  const keyV2 = (import.meta.env['SHIPSTATION_API_KEY_V2'] as string | undefined) ?? '';
+
+  return createShipStationClient({
+    v1ApiKey: `${keyV1}:${secretV1}`,
+    v2ApiKey: keyV2,
+  });
 }
 
-const DEFAULT_ORIGIN_ZIP = '92101';
-const DEFAULT_CARRIER_CODE = 'stamps_com';
-const DEFAULT_SERVICE_CODE = 'usps_priority_mail';
+// ─────────────────────────────────────────────────────────────────────────────
+// Hook return type
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface UseRatesReturn {
+  /** Fetched rates. Empty until loaded. Sorted by totalCost ascending. */
+  rates: ShipStationRate[];
+  /** True while a fetch is in progress. */
+  loading: boolean;
+  /** Error from the last failed fetch, or null if no error. */
+  error: RateServiceError | null;
+  /** Whether rates came from cache (vs fresh fetch). */
+  fromCache: boolean;
+  /** ISO timestamp when rates were cached. */
+  cachedAt: Date | null;
+  /** Manually trigger a rate refresh (bypasses cache). */
+  refresh: () => void;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// useRates hook
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Fetch (or return cached) best shipping rate for a single order.
- * staleTime: 30 minutes | retry: 3
+ * Fetch shipping rates for an order.
+ *
+ * Behavior:
+ * - Fetches on mount when orderId is provided
+ * - Returns cached rates immediately if available (30min TTL)
+ * - Exposes refresh() to force a re-fetch (clears rate cache entry)
+ * - Returns sorted rates (cheapest first)
+ * - Aborts in-flight fetch if orderId changes or component unmounts
+ *
+ * Origin ZIP: Uses order.shipFrom.postalCode (set from warehouse address).
+ *
+ * @param orderId - Internal order ID string (from Order.id)
+ * @returns { rates, loading, error, fromCache, cachedAt, refresh }
+ *
+ * @example
+ * ```tsx
+ * function ShippingPanel({ orderId }: { orderId: string }) {
+ *   const { rates, loading, error, refresh } = useRates(orderId);
+ *
+ *   return (
+ *     <>
+ *       <button onClick={refresh} disabled={loading}>
+ *         {loading ? 'Fetching Rates...' : 'Fetch Rates'}
+ *       </button>
+ *       {error && <p className="error">{error.message}</p>}
+ *       {rates.map(r => <RateRow key={r.serviceCode} rate={r} />)}
+ *     </>
+ *   );
+ * }
+ * ```
  */
-export function useOrderRates(orderId: number, clientId: number) {
-  const orders = useOrdersStore((state) => state.orders);
+export function useRates(orderId: string | null): UseRatesReturn {
+  const [rates, setRates] = useState<ShipStationRate[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<RateServiceError | null>(null);
+  const [fromCache, setFromCache] = useState(false);
+  const [cachedAt, setCachedAt] = useState<Date | null>(null);
 
-  return useQuery<ShipStationRate | null>({
-    queryKey: ['rates', orderId],
-    queryFn: async (): Promise<ShipStationRate | null> => {
-      const order = orders.find((o) => o.orderId === orderId);
-      if (!order) {
-        console.warn('[useRates] order not found', { orderId });
-        return null;
+  // Track refresh trigger — increment to re-run the effect
+  const refreshCountRef = useRef(0);
+  const [refreshTick, setRefreshTick] = useState(0);
+
+  // Read order from allOrders (canonical Order domain type)
+  const order = useOrdersStore((state) =>
+    orderId ? state.allOrders.find((o) => o.id === orderId) ?? null : null,
+  );
+
+  // FIX: doFetch logic is inlined in useEffect — no useCallback diamond dependency.
+  // Previously: useCallback(doFetch, [orderId, order]) → useEffect([doFetch, refreshTick])
+  // This created a two-hop dependency chain. Inlining removes the intermediate node.
+  useEffect(() => {
+    if (!orderId || !order) {
+      setRates([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const forceRefresh = refreshCountRef.current > 0;
+
+    async function runFetch() {
+      if (forceRefresh) {
+        clearRateServiceCache();
       }
-      const request = buildRateFetchRequest(
-        order,
-        order.selectedCarrierCode ?? DEFAULT_CARRIER_CODE,
-        DEFAULT_ORIGIN_ZIP,
+
+      setLoading(true);
+      setError(null);
+
+      const client = getShipStationClient();
+
+      const result = await fetchRates(
+        {
+          orderId: order!.id,
+          clientId: order!.clientId,
+          weightOz: order!.weightOz,
+          dimensions: {
+            lengthIn: order!.dimensions.lengthIn,
+            widthIn: order!.dimensions.widthIn,
+            heightIn: order!.dimensions.heightIn,
+          },
+          originZip: order!.shipFrom.postalCode,
+          destinationZip: order!.shipTo.postalCode,
+          residential: order!.shipTo.residential ?? false,
+        },
+        client,
       );
-      if (!request) {
-        console.warn('[useRates] cannot build rate request', { orderId });
-        return null;
+
+      if (controller.signal.aborted) return;
+
+      if (result.ok) {
+        // Sort cheapest first
+        const sorted = [...result.rates].sort((a, b) => a.totalCost - b.totalCost);
+        setRates(sorted);
+        setFromCache(result.fromCache);
+        setCachedAt(result.cachedAt);
+        setError(null);
+      } else {
+        setError(result.error);
+        setRates([]);
       }
-      return getCachedOrFetchedRate(
-        request,
-        getClientCredentials(String(clientId)),
-        order.selectedServiceCode ?? DEFAULT_SERVICE_CODE,
-      );
-    },
-    staleTime: 1000 * 60 * 30,
-    retry: 3,
-    enabled: orderId > 0 && clientId > 0,
-  });
-}
 
-/**
- * Force-refresh rates for a specific order.
- * Clears in-memory cache + invalidates React Query cache.
- */
-export function useRefreshRates(orderId: number) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (): Promise<void> => { clearRateCache(); },
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['rates', orderId] }); },
-    onError: (err: unknown) => {
-      console.error('[useRates] useRefreshRates failed', { orderId, error: err instanceof Error ? err.message : String(err) });
-    },
-  });
-}
+      setLoading(false);
+    }
 
-/**
- * Batch-enrich all current store orders with rates.
- */
-export function useEnrichOrdersWithRates(clientId: number) {
-  const enrichOrdersWithRates = useOrdersStore((state) => state.enrichOrdersWithRates);
-  const orders = useOrdersStore((state) => state.orders);
-  const queryClient = useQueryClient();
+    void runFetch();
 
-  return useMutation({
-    mutationFn: async (): Promise<void> => {
-      await enrichOrdersWithRates(orders, String(clientId));
-    },
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['rates'] }); },
-    onError: (err: unknown) => {
-      console.error('[useRates] useEnrichOrdersWithRates failed', { clientId, error: err instanceof Error ? err.message : String(err) });
-    },
-  });
+    return () => {
+      controller.abort();
+    };
+  }, [orderId, order, refreshTick]);
+
+  const refresh = useCallback(() => {
+    refreshCountRef.current += 1;
+    setRefreshTick((t) => t + 1);
+  }, []);
+
+  return { rates, loading, error, fromCache, cachedAt, refresh };
 }
