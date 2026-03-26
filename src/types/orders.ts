@@ -13,26 +13,80 @@ export type OrderId = string;
 export type RoundingMethod = 'bankers' | 'standard';
 
 // ---------------------------------------------------------------------------
-// BillingCalculation — exported here so services/billingService.ts can import it.
-// The `utils/billingService.ts` uses a legacy shape for backward compat.
+// BillingCalculation — SSOT for all billing math.
+//
+// Q7 (DJ, LOCKED): "The rates should be from when the label has been created,
+// or when the ss records show the label rates. It should never be the fetched
+// rates before label creation since these rates aren't locked in until it's
+// selected and printed."
+//
+// Formula (LOCKED):
+//   total = (shippingCost + prepCost + packageCost) × (1 + carrierMarkupPercent / 100)
+//
+// Expanded from the legacy 2-field shape to include prep + package line items
+// per Q7 billing section requirements. The `baseRate` field is retained for
+// backward compat with services/billingService.ts (= shippingCost).
 // ---------------------------------------------------------------------------
 
 export interface BillingCalculation {
-  /** Raw carrier cost before markup. */
-  baseRate: number;
-  /** Residential delivery surcharge. */
-  residentialSurcharge: number;
-  /** Markup percentage applied. */
-  carrierMarkupPercent: number;
-  /** baseRate + residentialSurcharge */
+  /**
+   * Shipping cost from the label — NOT the pre-creation fetched rate.
+   * Q7: "It should never be the fetched rates before label creation."
+   * Source: OrderLabel.shipmentCost (set at label creation time).
+   */
+  shippingCost: number;
+
+  /**
+   * Prep cost per order (e.g. kitting, inspection, handling).
+   * Configured in billingStore.settings.prepCost.
+   * Default: $0.00 until DJ specifies TBD value.
+   */
+  prepCost: number;
+
+  /**
+   * Package material cost, derived from package weight × packageCostPerOz.
+   * Q7: "package size & dimensions" required in billing data.
+   * Configured in billingStore.settings.packageCostPerOz.
+   */
+  packageCost: number;
+
+  /** shippingCost + prepCost + packageCost (pre-markup subtotal) */
   subtotal: number;
-  /** Final total after markup, rounded via RoundingMethod. */
+
+  /** Carrier markup percentage applied (e.g. 15 = 15%). */
+  carrierMarkupPercent: number;
+
+  /**
+   * Final total after markup: subtotal × (1 + carrierMarkupPercent / 100)
+   * Rounded via banker's rounding (IEEE 754 round-half-to-even) to nearest $0.01.
+   */
   totalCost: number;
-  /** Human-readable audit trail, e.g. "$7.50 base + $4.40 residential × (1 + 15%) = $13.68" */
+
+  /** Human-readable audit trail, e.g. "$7.50 ship + $1.00 prep + $0.50 pkg × (1 + 15%) = $10.35" */
   breakdown: string;
+
+  /** Timestamp when this calculation was last run. */
   calculatedAt: Date;
+
   /** Which rounding algorithm was used. */
   roundingMethod: RoundingMethod;
+
+  /**
+   * True if this billing record has been voided.
+   * Q7: "If an order has been voided, then there should be a mark on the billing
+   * at the order level notating that."
+   * Voided records CANNOT be recalculated (immutable after void).
+   */
+  voided: boolean;
+
+  /** Timestamp when voided, if applicable. */
+  voidedAt?: Date;
+
+  // ── Backward-compat aliases ────────────────────────────────────────────────
+  /** @deprecated Use shippingCost. Retained for backward compat with services/billingService.ts. */
+  baseRate: number;
+  /** @deprecated Use 0 — residential surcharge is not part of Q7 formula. Retained for backward compat. */
+  residentialSurcharge: number;
 }
 
 // ---------------------------------------------------------------------------

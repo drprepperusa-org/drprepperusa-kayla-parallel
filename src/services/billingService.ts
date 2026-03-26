@@ -242,6 +242,13 @@ export function calculateBilling(input: BillingInput): BillingResult {
   }
 
   const calculation: BillingCalculation = {
+    // Q7 new fields — services/billingService.ts maps legacy shape to expanded type
+    // shippingCost = baseRate (carrier rate from label); prep + package = 0 (legacy caller)
+    shippingCost: baseRate,
+    prepCost: 0,
+    packageCost: 0,
+    voided: false,
+    // Legacy fields (backward compat — retained as-is)
     baseRate,
     residentialSurcharge,
     carrierMarkupPercent,
