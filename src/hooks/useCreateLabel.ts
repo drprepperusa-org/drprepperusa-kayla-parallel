@@ -3,8 +3,7 @@
  * @description React hook for creating a shipping label for an order.
  *
  * Wires to:
- * - src/services/labelService.ts (createLabel)
- * - src/api/shipstationClient.ts (createShipStationClient)
+ * - src/api/proxyClient.ts (createLabelViaProxy) — server handles ShipStation V1+V2
  * - OrdersStore.addLabel (updates order state after successful creation)
  *
  * Usage in ShippingPanel (Create Label button):
@@ -25,11 +24,10 @@
 import { useState, useCallback, useRef } from 'react';
 import { useOrdersStore } from '../stores/ordersStore';
 import {
-  createLabel as createLabelService,
-  type LabelRequest,
   type LabelServiceError,
+  LabelServiceError as LabelServiceErrorClass,
 } from '../services/labelService';
-import { createShipStationClient } from '../api/shipstationClient';
+import { createLabelViaProxy } from '../api/proxyClient';
 import type { OrderLabel, OrderId } from '../types/orders';
 import type { ShipStationRate } from '../services/rateService';
 
@@ -151,61 +149,56 @@ export function useCreateLabel(orderId: OrderId | null): UseCreateLabelReturn {
 
       const shipTo = order.shipTo;
 
-      const req: LabelRequest = {
-        orderId: order.id,
-        carrierCode: rate.carrierCode,
-        serviceCode: rate.serviceCode,
-        weightOz: order.weightOz,
-        dimensions: {
-          lengthIn: order.dimensions.lengthIn,
-          widthIn: order.dimensions.widthIn,
-          heightIn: order.dimensions.heightIn,
-        },
-        shipFrom: DEFAULT_SHIP_FROM,
-        shipTo: {
-          name: shipTo.name,
-          company: shipTo.company,
-          street1: shipTo.street1,
-          street2: shipTo.street2,
-          city: shipTo.city,
-          state: shipTo.state,
-          postalCode: shipTo.postalCode,
-          country: shipTo.country ?? 'US',
-        },
-        residential: shipTo.residential ?? false,
-        confirmation: 'none',
-        // FIX: import.meta.env.DEV is already a boolean — no need for === true comparison
-        testLabel: import.meta.env.DEV,
-      };
-
-      // NOTE: PENDING — move to server-side proxy so keys are never in the browser bundle.
-      // See shipstationClient.ts for the security tracking comment.
-      const keyV1 = (import.meta.env['SHIPSTATION_API_KEY_V1'] as string | undefined) ?? '';
-      const secretV1 = (import.meta.env['SHIPSTATION_API_SECRET_V1'] as string | undefined) ?? '';
-      const keyV2 = (import.meta.env['SHIPSTATION_API_KEY_V2'] as string | undefined) ?? '';
-
-      const client = createShipStationClient({
-        v1ApiKey: `${keyV1}:${secretV1}`,
-        v2ApiKey: keyV2,
-      });
-
       try {
-        const result = await createLabelService(req, client);
+        const result = await createLabelViaProxy({
+          orderId: order.id,
+          carrierCode: rate.carrierCode,
+          serviceCode: rate.serviceCode,
+          weightOz: order.weightOz,
+          dimensions: {
+            lengthIn: order.dimensions.lengthIn,
+            widthIn: order.dimensions.widthIn,
+            heightIn: order.dimensions.heightIn,
+          },
+          shipFrom: DEFAULT_SHIP_FROM,
+          shipTo: {
+            name: shipTo.name,
+            company: shipTo.company,
+            street1: shipTo.street1,
+            street2: shipTo.street2,
+            city: shipTo.city,
+            state: shipTo.state,
+            postalCode: shipTo.postalCode,
+            country: shipTo.country ?? 'US',
+            residential: shipTo.residential ?? false,
+          },
+          confirmation: 'none',
+          testLabel: import.meta.env.DEV,
+        });
 
         if (result.ok) {
-          setLabel(result.label);
+          setLabel(result.data.label);
           setError(null);
 
           // Update the store — transitions order to 'shipped'
-          addLabel(orderId, result.label);
+          addLabel(orderId, result.data.label);
 
-          return result.label;
+          return result.data.label;
         } else {
-          setError(result.error);
-          console.error('[useCreateLabel] Label creation failed', {
+          const proxyError = new LabelServiceErrorClass(
+            result.error,
+            result.status === 401
+              ? 'AUTH_ERROR'
+              : result.status >= 500
+              ? 'API_ERROR'
+              : 'API_ERROR',
+          );
+          setError(proxyError);
+          console.error('[useCreateLabel] Label creation failed via proxy', {
             orderId,
-            code: result.error.code,
-            message: result.error.message,
+            status: result.status,
+            code: result.code,
+            error: result.error,
           });
           return null;
         }

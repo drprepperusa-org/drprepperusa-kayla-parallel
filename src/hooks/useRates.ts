@@ -3,8 +3,7 @@
  * @description React hook for fetching shipping rates for an order.
  *
  * Wires to:
- * - src/services/rateService.ts (fetchRates)
- * - src/api/shipstationClient.ts (createShipStationClient)
+ * - src/api/proxyClient.ts (fetchRatesFromProxy) — server handles ShipStation V2
  * - OrdersStore (read order by ID from allOrders)
  *
  * Usage in ShippingPanel (Fetch Rates button):
@@ -31,59 +30,35 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useOrdersStore } from '../stores/ordersStore';
 import { RateServiceError, type ShipStationRate } from '../services/rateService';
+import { fetchRatesFromProxy } from '../api/proxyClient';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Rate fetch via server-side proxy
 // ─────────────────────────────────────────────────────────────────────────────
 
-// SECURITY: API keys have been removed from client-side code.
-// PENDING: Move to server-side proxy at /api/rates
-// TODO: Once server proxy is live, update this to POST /api/rates with order data.
-// The proxy will hold SHIPSTATION_API_KEY_V1 / SHIPSTATION_API_SECRET_V1
-// in server-side environment variables (never exposed to the browser bundle).
-
-interface ProxyRateRequest {
-  orderId: string;
-  clientId: string;
-  weightOz: number;
-  dimensions: { lengthIn: number; widthIn: number; heightIn: number };
-  originZip: string;
-  destinationZip: string;
-  residential: boolean;
-}
-
-interface ProxyRateResponse {
-  rates: ShipStationRate[];
-  fromCache: boolean;
-  cachedAt: string | null;
-}
+// SECURITY: ShipStation credentials are server-side only (process.env).
+// Client calls /api/rates/:orderId — server handles ShipStation communication.
 
 async function fetchRatesViaProxy(
-  request: ProxyRateRequest,
+  orderId: string,
 ): Promise<{ ok: true; rates: ShipStationRate[]; fromCache: boolean; cachedAt: Date | null } | { ok: false; error: RateServiceError }> {
-  const response = await fetch('/api/rates', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
-  });
+  const result = await fetchRatesFromProxy(orderId);
 
-  if (!response.ok) {
-    const text = await response.text().catch(() => 'Unknown error');
+  if (result.ok) {
     return {
-      ok: false,
-      error: new RateServiceError(
-        `Rate proxy returned ${response.status}: ${text}`,
-        'NETWORK_ERROR',
-      ),
+      ok: true,
+      rates: result.data.rates,
+      fromCache: result.data.fromCache,
+      cachedAt: result.data.cachedAt ? new Date(result.data.cachedAt) : null,
     };
   }
 
-  const data = (await response.json()) as ProxyRateResponse;
   return {
-    ok: true,
-    rates: data.rates,
-    fromCache: data.fromCache,
-    cachedAt: data.cachedAt ? new Date(data.cachedAt) : null,
+    ok: false,
+    error: new RateServiceError(
+      `Rate proxy returned ${result.status}: ${result.error}`,
+      result.status === 401 ? 'AUTH_ERROR' : 'NETWORK_ERROR',
+    ),
   };
 }
 
@@ -172,26 +147,10 @@ export function useRates(orderId: string | null): UseRatesReturn {
     const controller = new AbortController();
 
     async function runFetch() {
-      // Note: cache-busting for forced refresh is now handled server-side.
-      // The forceRefresh flag is passed as a header for the proxy to interpret.
       setLoading(true);
       setError(null);
 
-      // TODO: Once server proxy is live, update this to POST /api/rates with order data.
-      // PENDING: Move to server-side proxy at /api/rates
-      const result = await fetchRatesViaProxy({
-        orderId: order!.id,
-        clientId: order!.clientId,
-        weightOz: order!.weightOz,
-        dimensions: {
-          lengthIn: order!.dimensions.lengthIn,
-          widthIn: order!.dimensions.widthIn,
-          heightIn: order!.dimensions.heightIn,
-        },
-        originZip: order!.shipFrom.postalCode,
-        destinationZip: order!.shipTo.postalCode,
-        residential: order!.shipTo.residential ?? false,
-      });
+      const result = await fetchRatesViaProxy(order!.id);
 
       if (controller.signal.aborted) return;
 
