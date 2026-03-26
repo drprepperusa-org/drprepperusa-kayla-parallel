@@ -70,6 +70,10 @@ export interface SyncStats {
  * - On error: calls store.syncError() to surface error in sync state
  * - Prevents concurrent syncs (no-op if loading)
  *
+ * KEY FIX: allOrders is read from store.getState() at call time — NOT from the
+ * useCallback closure. This prevents stale closure bugs where the callback
+ * captures a snapshot of allOrders that becomes outdated between renders.
+ *
  * @returns { sync, loading, error, lastSyncTime, lastSyncStats }
  *
  * @example
@@ -98,8 +102,7 @@ export function useSync(): UseSyncReturn {
   const [error, setError] = useState<SyncServiceError | null>(null);
   const [lastSyncStats, setLastSyncStats] = useState<SyncStats | null>(null);
 
-  // Store state
-  const allOrders = useOrdersStore((state) => state.allOrders);
+  // Store state — subscription for reactive re-renders
   const lastSyncTime = useOrdersStore((state) => state.sync.lastSyncTime);
   const startSync = useOrdersStore((state) => state.startSync);
   const syncComplete = useOrdersStore((state) => state.syncComplete);
@@ -117,19 +120,27 @@ export function useSync(): UseSyncReturn {
     // Signal store that sync started
     startSync();
 
-    const keyV1 = (import.meta.env['PUBLIC_SHIPSTATION_API_KEY_V1'] as string | undefined) ?? '';
-    const secretV1 = (import.meta.env['PUBLIC_SHIPSTATION_API_SECRET_V1'] as string | undefined) ?? '';
-    const keyV2 = (import.meta.env['PUBLIC_SHIPSTATION_API_KEY_V2'] as string | undefined) ?? '';
+    // NOTE: PENDING — move to server-side proxy so keys are never in the browser bundle.
+    // See shipstationClient.ts for the security tracking comment.
+    const keyV1 = (import.meta.env['SHIPSTATION_API_KEY_V1'] as string | undefined) ?? '';
+    const secretV1 = (import.meta.env['SHIPSTATION_API_SECRET_V1'] as string | undefined) ?? '';
+    const keyV2 = (import.meta.env['SHIPSTATION_API_KEY_V2'] as string | undefined) ?? '';
 
     const client = createShipStationClient({
       v1ApiKey: `${keyV1}:${secretV1}`,
       v2ApiKey: keyV2,
     });
 
+    // KEY FIX: Read allOrders from store.getState() at call time — NOT from the
+    // useCallback closure. Closures capture a snapshot; getState() always returns
+    // the current store value, preventing stale-closure bugs in rapid sync scenarios.
+    const currentAllOrders = useOrdersStore.getState().allOrders;
+    const currentLastSyncTime = useOrdersStore.getState().sync.lastSyncTime;
+
     const outcome = await syncOrders(
-      { lastSyncTime },
+      { lastSyncTime: currentLastSyncTime },
       client,
-      allOrders,
+      currentAllOrders,
     );
 
     setLoading(false);
@@ -171,11 +182,13 @@ export function useSync(): UseSyncReturn {
 
       // If we got partial data, still update the store
       if (serviceError.partialOrders && serviceError.partialOrders.length > 0) {
+        // Re-read current allOrders at this point (may have changed)
+        const latestOrders = useOrdersStore.getState().allOrders;
         console.warn('[useSync] Partial sync — updating store with partial data', {
           partialCount: serviceError.partialOrders.length,
           error: serviceError.message,
         });
-        syncComplete(new Date(), [...allOrders, ...serviceError.partialOrders]);
+        syncComplete(new Date(), [...latestOrders, ...serviceError.partialOrders]);
       }
 
       console.error('[useSync] Sync failed', {
@@ -183,7 +196,8 @@ export function useSync(): UseSyncReturn {
         message: serviceError.message,
       });
     }
-  }, [loading, lastSyncTime, allOrders, startSync, syncComplete, syncError]);
+  }, [loading, startSync, syncComplete, syncError]);
+  // NOTE: allOrders and lastSyncTime intentionally NOT in deps — read from getState() at call time.
 
   return {
     sync,

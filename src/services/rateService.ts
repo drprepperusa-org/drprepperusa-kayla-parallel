@@ -37,15 +37,27 @@
  * ```
  */
 
-import type { ShipStationClient } from '../api/shipstationClient';
-import { ShipStationError } from '../api/shipstationClient';
+import { ShipStationError, type ShipStationClient } from '../api/shipstationClient';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Default cache TTL: 30 minutes in milliseconds. */
-const DEFAULT_CACHE_TTL_MS = 30 * 60 * 1000;
+/**
+ * Cache TTL: configurable via CACHE_TTL env var (milliseconds).
+ * Falls back to 30 minutes if not set or unparseable.
+ * Set in .env.example as CACHE_TTL=1800000.
+ *
+ * NOTE: CACHE_TTL is intentionally NOT prefixed with PUBLIC_ — it is server-only
+ * config and does not need to be exposed to the browser. When this service is
+ * moved to a server-side proxy, the env var will be read server-side only.
+ */
+const DEFAULT_CACHE_TTL_MS = (() => {
+  const raw = import.meta.env['CACHE_TTL'] as string | undefined;
+  if (!raw) return 30 * 60 * 1000;
+  const parsed = parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 30 * 60 * 1000;
+})();
 
 /** ShipStation V2 carrier IDs to fetch rates for. */
 const DEFAULT_CARRIER_IDS = ['stamps_com', 'ups', 'fedex'];

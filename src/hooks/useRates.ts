@@ -4,8 +4,8 @@
  *
  * Wires to:
  * - src/services/rateService.ts (fetchRates)
- * - src/api/shipstationClient.ts (createShipStationClientFromEnv)
- * - OrdersStore (read order by ID)
+ * - src/api/shipstationClient.ts (createShipStationClient)
+ * - OrdersStore (read order by ID from allOrders)
  *
  * Usage in ShippingPanel (Fetch Rates button):
  * ```tsx
@@ -21,6 +21,11 @@
  *
  * Cache: 30min in-memory TTL via rateService cache.
  * Fetch on mount: yes (when orderId is provided and order has required data).
+ *
+ * FIX: doFetch logic is inlined directly into useEffect — no useCallback wrapper.
+ * This eliminates the diamond dependency pattern (useCallback depends on orderId/order,
+ * useEffect depends on doFetch, which effectively means both depend on orderId/order
+ * through two hops). Inlining is cleaner and avoids the intermediate cache miss.
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -29,14 +34,15 @@ import { fetchRates, clearRateServiceCache, type ShipStationRate, type RateServi
 import { createShipStationClient } from '../api/shipstationClient';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Client singleton (module-level, created once per session)
+// Client factory (creates a new client per fetch — keys may change)
 // ─────────────────────────────────────────────────────────────────────────────
 
 function getShipStationClient() {
-  // Use mock credentials for development — real creds from env in production
-  const keyV1 = (import.meta.env['PUBLIC_SHIPSTATION_API_KEY_V1'] as string | undefined) ?? '';
-  const secretV1 = (import.meta.env['PUBLIC_SHIPSTATION_API_SECRET_V1'] as string | undefined) ?? '';
-  const keyV2 = (import.meta.env['PUBLIC_SHIPSTATION_API_KEY_V2'] as string | undefined) ?? '';
+  // NOTE: PENDING — move to server-side proxy so keys are never in the browser bundle.
+  // See shipstationClient.ts for the security tracking comment.
+  const keyV1 = (import.meta.env['SHIPSTATION_API_KEY_V1'] as string | undefined) ?? '';
+  const secretV1 = (import.meta.env['SHIPSTATION_API_SECRET_V1'] as string | undefined) ?? '';
+  const keyV2 = (import.meta.env['SHIPSTATION_API_KEY_V2'] as string | undefined) ?? '';
 
   return createShipStationClient({
     v1ApiKey: `${keyV1}:${secretV1}`,
@@ -77,8 +83,7 @@ export interface UseRatesReturn {
  * - Returns sorted rates (cheapest first)
  * - Aborts in-flight fetch if orderId changes or component unmounts
  *
- * Origin ZIP: Uses default 92101 (San Diego warehouse).
- * TODO: Pull from store/config once warehouse address is configurable.
+ * Origin ZIP: Uses order.shipFrom.postalCode (set from warehouse address).
  *
  * @param orderId - Internal order ID string (from Order.id)
  * @returns { rates, loading, error, fromCache, cachedAt, refresh }
@@ -107,19 +112,30 @@ export function useRates(orderId: string | null): UseRatesReturn {
   const [fromCache, setFromCache] = useState(false);
   const [cachedAt, setCachedAt] = useState<Date | null>(null);
 
-  // Track refresh trigger without adding it to effect deps
+  // Track refresh trigger — increment to re-run the effect
   const refreshCountRef = useRef(0);
   const [refreshTick, setRefreshTick] = useState(0);
 
-  // Read order from store
+  // Read order from allOrders (canonical Order domain type)
   const order = useOrdersStore((state) =>
     orderId ? state.allOrders.find((o) => o.id === orderId) ?? null : null,
   );
 
-  const doFetch = useCallback(
-    async (forceRefresh: boolean, abortSignal: AbortSignal) => {
-      if (!orderId || !order) return;
+  // FIX: doFetch logic is inlined in useEffect — no useCallback diamond dependency.
+  // Previously: useCallback(doFetch, [orderId, order]) → useEffect([doFetch, refreshTick])
+  // This created a two-hop dependency chain. Inlining removes the intermediate node.
+  useEffect(() => {
+    if (!orderId || !order) {
+      setRates([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
 
+    const controller = new AbortController();
+    const forceRefresh = refreshCountRef.current > 0;
+
+    async function runFetch() {
       if (forceRefresh) {
         clearRateServiceCache();
       }
@@ -131,22 +147,22 @@ export function useRates(orderId: string | null): UseRatesReturn {
 
       const result = await fetchRates(
         {
-          orderId: order.id,
-          clientId: order.clientId,
-          weightOz: order.weightOz,
+          orderId: order!.id,
+          clientId: order!.clientId,
+          weightOz: order!.weightOz,
           dimensions: {
-            lengthIn: order.dimensions.lengthIn,
-            widthIn: order.dimensions.widthIn,
-            heightIn: order.dimensions.heightIn,
+            lengthIn: order!.dimensions.lengthIn,
+            widthIn: order!.dimensions.widthIn,
+            heightIn: order!.dimensions.heightIn,
           },
-          originZip: order.shipFrom.postalCode,
-          destinationZip: order.shipTo.postalCode,
-          residential: order.shipTo.residential,
+          originZip: order!.shipFrom.postalCode,
+          destinationZip: order!.shipTo.postalCode,
+          residential: order!.shipTo.residential ?? false,
         },
         client,
       );
 
-      if (abortSignal.aborted) return;
+      if (controller.signal.aborted) return;
 
       if (result.ok) {
         // Sort cheapest first
@@ -161,26 +177,14 @@ export function useRates(orderId: string | null): UseRatesReturn {
       }
 
       setLoading(false);
-    },
-    [orderId, order],
-  );
-
-  useEffect(() => {
-    if (!orderId || !order) {
-      setRates([]);
-      setLoading(false);
-      setError(null);
-      return;
     }
 
-    const controller = new AbortController();
-    const isRefresh = refreshCountRef.current > 0;
-    void doFetch(isRefresh, controller.signal);
+    void runFetch();
 
     return () => {
       controller.abort();
     };
-  }, [orderId, order, doFetch, refreshTick]);
+  }, [orderId, order, refreshTick]);
 
   const refresh = useCallback(() => {
     refreshCountRef.current += 1;

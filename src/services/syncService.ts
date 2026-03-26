@@ -31,8 +31,7 @@
  * ```
  */
 
-import type { ShipStationClient } from '../api/shipstationClient';
-import { ShipStationError } from '../api/shipstationClient';
+import { ShipStationError, type ShipStationClient } from '../api/shipstationClient';
 import type { Order } from '../types/orders';
 import { mergeOrders } from '../utils/orderFilters';
 
@@ -155,7 +154,7 @@ interface ShipStationV1Order {
   };
 }
 
-interface ShipStationV1OrdersResponse {
+interface _ShipStationV1OrdersResponse {
   orders: ShipStationV1Order[];
   total: number;
   page: number;

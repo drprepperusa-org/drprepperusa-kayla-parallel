@@ -22,7 +22,7 @@
  * createLabel() returns it immediately without making an API call.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useOrdersStore } from '../stores/ordersStore';
 import {
   createLabel as createLabelService,
@@ -114,6 +114,12 @@ export function useCreateLabel(orderId: OrderId | null): UseCreateLabelReturn {
   const [error, setError] = useState<LabelServiceError | null>(null);
   const [label, setLabel] = useState<OrderLabel | null>(null);
 
+  /**
+   * Ref-based loading guard — prevents concurrent creation without being in
+   * the useCallback dependency array (which would cause stale closure issues).
+   */
+  const isLoadingRef = useRef<boolean>(false);
+
   // Store actions
   const addLabel = useOrdersStore((state) => state.addLabel);
   const order = useOrdersStore((state) =>
@@ -133,12 +139,13 @@ export function useCreateLabel(orderId: OrderId | null): UseCreateLabelReturn {
         return order.label;
       }
 
-      // Prevent concurrent creation
-      if (loading) {
+      // Prevent concurrent creation via ref (not state, so it's not stale in closure)
+      if (isLoadingRef.current) {
         console.warn('[useCreateLabel] Label creation already in progress', { orderId });
         return null;
       }
 
+      isLoadingRef.current = true;
       setLoading(true);
       setError(null);
 
@@ -165,43 +172,51 @@ export function useCreateLabel(orderId: OrderId | null): UseCreateLabelReturn {
           postalCode: shipTo.postalCode,
           country: shipTo.country ?? 'US',
         },
-        residential: shipTo.residential,
+        residential: shipTo.residential ?? false,
         confirmation: 'none',
-        testLabel: import.meta.env['DEV'] === true,
+        // FIX: import.meta.env.DEV is already a boolean — no need for === true comparison
+        testLabel: import.meta.env.DEV,
       };
 
-      const keyV1 = (import.meta.env['PUBLIC_SHIPSTATION_API_KEY_V1'] as string | undefined) ?? '';
-      const secretV1 = (import.meta.env['PUBLIC_SHIPSTATION_API_SECRET_V1'] as string | undefined) ?? '';
-      const keyV2 = (import.meta.env['PUBLIC_SHIPSTATION_API_KEY_V2'] as string | undefined) ?? '';
+      // NOTE: PENDING — move to server-side proxy so keys are never in the browser bundle.
+      // See shipstationClient.ts for the security tracking comment.
+      const keyV1 = (import.meta.env['SHIPSTATION_API_KEY_V1'] as string | undefined) ?? '';
+      const secretV1 = (import.meta.env['SHIPSTATION_API_SECRET_V1'] as string | undefined) ?? '';
+      const keyV2 = (import.meta.env['SHIPSTATION_API_KEY_V2'] as string | undefined) ?? '';
 
       const client = createShipStationClient({
         v1ApiKey: `${keyV1}:${secretV1}`,
         v2ApiKey: keyV2,
       });
 
-      const result = await createLabelService(req, client);
+      try {
+        const result = await createLabelService(req, client);
 
-      setLoading(false);
+        if (result.ok) {
+          setLabel(result.label);
+          setError(null);
 
-      if (result.ok) {
-        setLabel(result.label);
-        setError(null);
+          // Update the store — transitions order to 'shipped'
+          addLabel(orderId, result.label);
 
-        // Update the store — transitions order to 'shipped'
-        addLabel(orderId, result.label);
-
-        return result.label;
-      } else {
-        setError(result.error);
-        console.error('[useCreateLabel] Label creation failed', {
-          orderId,
-          code: result.error.code,
-          message: result.error.message,
-        });
-        return null;
+          return result.label;
+        } else {
+          setError(result.error);
+          console.error('[useCreateLabel] Label creation failed', {
+            orderId,
+            code: result.error.code,
+            message: result.error.message,
+          });
+          return null;
+        }
+      } finally {
+        // Always release the loading guard, even on unexpected errors
+        isLoadingRef.current = false;
+        setLoading(false);
       }
     },
-    [orderId, order, loading, addLabel],
+    // isLoadingRef is NOT in deps — refs are stable and never stale
+    [orderId, order, addLabel],
   );
 
   // Sync label from store if it changes externally (e.g. sync brought it in)

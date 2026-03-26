@@ -39,8 +39,7 @@
  * ```
  */
 
-import type { ShipStationClient, ShipStationV2LabelResponse, ShipStationV1ShipmentDetail } from '../api/shipstationClient';
-import { ShipStationError } from '../api/shipstationClient';
+import { ShipStationError, type ShipStationClient, type ShipStationV2LabelResponse, type ShipStationV1ShipmentDetail } from '../api/shipstationClient';
 import type { OrderLabel } from '../types/orders';
 
 // ─────────────────────────────────────────────────────────────────────────────

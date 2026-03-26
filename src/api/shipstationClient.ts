@@ -565,27 +565,35 @@ export function createShipStationClient(config: ShipStationClientConfig): ShipSt
  * Create a ShipStation client from environment variables.
  * Reads from import.meta.env (Vite/Rsbuild convention).
  *
- * Required env vars:
- * - PUBLIC_SHIPSTATION_API_KEY_V1
- * - PUBLIC_SHIPSTATION_API_SECRET_V1
- * - PUBLIC_SHIPSTATION_API_KEY_V2
+ * ⚠️  SECURITY — PENDING: Move to server-side proxy; never expose API keys to client.
+ *    ShipStation credentials are sensitive secrets. Exposing them in the browser bundle
+ *    allows any user to make arbitrary ShipStation API calls as this account.
+ *    Until a server-side proxy is implemented, keys should be accessed server-side only
+ *    and must NOT use the PUBLIC_ prefix (which embeds them in the JS bundle).
+ *    Tracking: docs/PHASE-2-ARCHITECTURE.md — "ShipStation Proxy (PENDING)"
+ *
+ * Required env vars (SERVER-ONLY, no PUBLIC_ prefix):
+ * - SHIPSTATION_API_KEY_V1
+ * - SHIPSTATION_API_SECRET_V1
+ * - SHIPSTATION_API_KEY_V2
  *
  * @throws {ShipStationError} if required env vars are missing
  */
 export function createShipStationClientFromEnv(): ShipStationClient {
-  const keyV1 = import.meta.env['PUBLIC_SHIPSTATION_API_KEY_V1'] as string | undefined;
-  const secretV1 = import.meta.env['PUBLIC_SHIPSTATION_API_SECRET_V1'] as string | undefined;
-  const keyV2 = import.meta.env['PUBLIC_SHIPSTATION_API_KEY_V2'] as string | undefined;
+  // ⚠️  PENDING: Move to server-side proxy, never expose keys to client.
+  const keyV1 = import.meta.env['SHIPSTATION_API_KEY_V1'] as string | undefined;
+  const secretV1 = import.meta.env['SHIPSTATION_API_SECRET_V1'] as string | undefined;
+  const keyV2 = import.meta.env['SHIPSTATION_API_KEY_V2'] as string | undefined;
 
   if (!keyV1 || !secretV1) {
     throw new ShipStationError(
-      'Missing ShipStation V1 credentials. Set PUBLIC_SHIPSTATION_API_KEY_V1 and PUBLIC_SHIPSTATION_API_SECRET_V1.',
+      'Missing ShipStation V1 credentials. Set SHIPSTATION_API_KEY_V1 and SHIPSTATION_API_SECRET_V1.',
       'AUTH_ERROR',
     );
   }
   if (!keyV2) {
     throw new ShipStationError(
-      'Missing ShipStation V2 API key. Set PUBLIC_SHIPSTATION_API_KEY_V2.',
+      'Missing ShipStation V2 API key. Set SHIPSTATION_API_KEY_V2.',
       'AUTH_ERROR',
     );
   }
@@ -593,7 +601,7 @@ export function createShipStationClientFromEnv(): ShipStationClient {
   return createShipStationClient({
     v1ApiKey: `${keyV1}:${secretV1}`,
     v2ApiKey: keyV2,
-    baseUrlV1: (import.meta.env['PUBLIC_SHIPSTATION_BASE_URL_V1'] as string | undefined) ?? DEFAULT_BASE_URL_V1,
-    baseUrlV2: (import.meta.env['PUBLIC_SHIPSTATION_BASE_URL_V2'] as string | undefined) ?? DEFAULT_BASE_URL_V2,
+    baseUrlV1: (import.meta.env['SHIPSTATION_BASE_URL_V1'] as string | undefined) ?? DEFAULT_BASE_URL_V1,
+    baseUrlV2: (import.meta.env['SHIPSTATION_BASE_URL_V2'] as string | undefined) ?? DEFAULT_BASE_URL_V2,
   });
 }

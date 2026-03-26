@@ -3,13 +3,31 @@
  */
 
 import { create } from 'zustand';
-import type { OrderDTO, OrderStatus } from '../types/orders';
+import type { OrderDTO, OrderStatus, Order, OrderId, OrderLabel } from '../types/orders';
 import { getMockOrdersByStatus } from '../api/mock-data';
 import { getMarkupRuleForCarrier, applyMarkup, type MarkupRule } from '../utils/markupService';
 import { getCachedOrFetchedRate } from '../utils/rateFetchCache';
 import { buildRateFetchRequest, type ClientCredentials } from '../api/rateService';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Sync state shape
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SyncState {
+  /** True while a sync is actively running. */
+  syncing: boolean;
+  /** ISO timestamp of the last successful sync. Null if never synced. */
+  lastSyncTime: Date | null;
+  /** Error message from the last failed sync. Null on success. */
+  lastSyncError: string | null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Store shape
+// ─────────────────────────────────────────────────────────────────────────────
+
 interface OrdersState {
+  // ── Paginated view (legacy OrderDTO shape) ────────────────────────────────
   orders: OrderDTO[];
   loading: boolean;
   error: string | null;
@@ -23,6 +41,18 @@ interface OrdersState {
   dateEnd: string | null;
   selectedOrderIds: Set<number>;
 
+  // ── Canonical all-orders list (Order domain type, used by sync + hooks) ───
+  /**
+   * Full list of all known orders (canonical Order domain type).
+   * Populated and updated by syncComplete().
+   * Read by useSync, useRates, useCreateLabel.
+   */
+  allOrders: Order[];
+
+  // ── Sync state ─────────────────────────────────────────────────────────────
+  sync: SyncState;
+
+  // ── Actions: paginated view ───────────────────────────────────────────────
   setStatus: (status: OrderStatus) => void;
   setPage: (page: number) => void;
   setSearchQuery: (query: string) => void;
@@ -40,8 +70,9 @@ interface OrdersState {
     serviceCode?: string,
   ) => Promise<void>;
 
+  // ── Actions: label state machine ──────────────────────────────────────────
   /**
-   * Transition order status to 'shipped' after successful label creation.
+   * Transition order status to 'shipped' after successful label creation (OrderDTO).
    * State machine: awaiting_shipment → shipped (triggered by label print)
    */
   markOrderAsShipped: (
@@ -52,13 +83,48 @@ interface OrdersState {
   ) => void;
 
   /**
-   * Record a label error for observability. Does NOT change order status.
-   * Leaves the order in its current state so the user can retry.
+   * Record a label error for observability (OrderDTO). Does NOT change order status.
    */
   handleLabelError: (orderId: string, error: string) => void;
+
+  /**
+   * Attach a completed OrderLabel to an Order in allOrders.
+   * Also transitions the order status to 'shipped'.
+   * Called by useCreateLabel on successful label creation.
+   */
+  addLabel: (orderId: OrderId, label: OrderLabel) => void;
+
+  // ── Actions: sync state machine ───────────────────────────────────────────
+  /**
+   * Signal that a sync has started.
+   * Sets sync.syncing = true, clears sync.lastSyncError.
+   */
+  startSync: () => void;
+
+  /**
+   * Signal that a sync completed successfully.
+   * Updates allOrders, sets lastSyncTime, clears syncing flag.
+   *
+   * @param syncedAt - Timestamp of the completed sync
+   * @param allOrders - Merged orders from syncService result
+   */
+  syncComplete: (syncedAt: Date, allOrders: Order[]) => void;
+
+  /**
+   * Signal that a sync failed.
+   * Clears syncing flag, records error message.
+   *
+   * @param errorMessage - Human-readable error for UI display
+   */
+  syncError: (errorMessage: string) => void;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Store implementation
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const useOrdersStore = create<OrdersState>((set, get) => ({
+  // ── Initial state: paginated view ─────────────────────────────────────────
   orders: [],
   loading: false,
   error: null,
@@ -72,6 +138,15 @@ export const useOrdersStore = create<OrdersState>((set, get) => ({
   dateEnd: null,
   selectedOrderIds: new Set(),
 
+  // ── Initial state: canonical orders + sync ────────────────────────────────
+  allOrders: [],
+  sync: {
+    syncing: false,
+    lastSyncTime: null,
+    lastSyncError: null,
+  },
+
+  // ── Paginated view actions ─────────────────────────────────────────────────
   setStatus: (status) => {
     set({ currentStatus: status, page: 1, selectedOrderIds: new Set() });
     get().fetchOrders();
@@ -156,6 +231,7 @@ export const useOrdersStore = create<OrdersState>((set, get) => ({
     });
   },
 
+  // ── Label state machine (OrderDTO) ─────────────────────────────────────────
   markOrderAsShipped: (orderId, shippingNumber, labelUrl, carrierCode) => {
     set((state) => ({
       orders: state.orders.map((o) => {
@@ -183,5 +259,50 @@ export const useOrdersStore = create<OrdersState>((set, get) => ({
     console.error('[ordersStore] handleLabelError', { orderId, error });
     // Toast is surfaced by labelStore — no duplicate toasts here
   },
-}));
 
+  // ── addLabel: attach OrderLabel to canonical Order ─────────────────────────
+  addLabel: (orderId, label) => {
+    set((state) => ({
+      allOrders: state.allOrders.map((o) => {
+        if (o.id !== orderId) return o;
+        return {
+          ...o,
+          status: 'shipped' as const,
+          label,
+        };
+      }),
+    }));
+  },
+
+  // ── Sync state machine ─────────────────────────────────────────────────────
+  startSync: () => {
+    set((state) => ({
+      sync: {
+        ...state.sync,
+        syncing: true,
+        lastSyncError: null,
+      },
+    }));
+  },
+
+  syncComplete: (syncedAt, allOrders) => {
+    set({
+      allOrders,
+      sync: {
+        syncing: false,
+        lastSyncTime: syncedAt,
+        lastSyncError: null,
+      },
+    });
+  },
+
+  syncError: (errorMessage) => {
+    set((state) => ({
+      sync: {
+        ...state.sync,
+        syncing: false,
+        lastSyncError: errorMessage,
+      },
+    }));
+  },
+}));
