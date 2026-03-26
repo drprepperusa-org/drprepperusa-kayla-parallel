@@ -6,13 +6,16 @@
  * - Pure service — no store access; caller is responsible for dispatching to store
  * - Stateless: no module-level state (lastSyncTime passed as input)
  * - Incremental: only fetches orders modified since lastSyncTime
- * - External detection: flags orders shipped or cancelled outside the app (Q6 pending)
+ * - External detection: flags orders shipped outside this app (Q6 — DJ's answer locked)
  * - Returns: { newOrders, updatedOrders, externallyShipped, errors }
  *
- * Q6 PENDING: Definition of "externally shipped/cancelled".
- * Current approach: an order is considered externally shipped if:
- *   - status === 'shipped' AND label field is absent in the store
- * Once Q6 is answered, update detectExternallyShipped() accordingly.
+ * Q6 (DJ, LOCKED): "An order is considered externally shipped if it's been shipped OUTSIDE
+ * of prepship OR shipstation. If there are shipstation records then it is considered shipped
+ * within shipstation. If shipstation has no records AND we didn't ship out of prepship,
+ * then it is considered externally shipped."
+ *
+ * "All orders must be checked to see if it's been shipped either through ss or externally
+ * every few minutes." — DJ Q6
  *
  * @example
  * ```ts
@@ -65,8 +68,14 @@ export interface SyncResult {
   /** Orders that existed and were updated on ShipStation. */
   updatedOrders: Order[];
   /**
-   * Orders that appear to have been shipped outside this app.
-   * Q6 PENDING: Definition TBD — see detectExternallyShipped() below.
+   * Orders detected as externally shipped (shipped outside prepship AND ShipStation).
+   *
+   * Q6 (DJ, LOCKED): "An order is considered externally shipped if it's been shipped
+   * OUTSIDE of prepship OR shipstation. If there are shipstation records then it is
+   * considered shipped within shipstation. If shipstation has no records AND we didn't
+   * ship out of prepship, then it is considered externally shipped."
+   *
+   * These orders have externallyShipped=true and externallyShippedAt set.
    */
   externallyShipped: Order[];
   /** Merged final orders array (ready to dispatch to store.syncComplete). */
@@ -266,33 +275,61 @@ function normalizeV1Order(raw: ShipStationV1Order): Order {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Detect orders that were shipped or cancelled outside this app.
+ * Detect orders that were shipped outside this app.
  *
- * Q6 PENDING: Final definition from DJ TBD.
- * Current heuristic: an order is "externally shipped" if:
- *   - API reports status === 'shipped'
- *   - AND no label exists in the current store for this order
+ * Q6 (DJ, LOCKED): "An order is considered externally shipped if it's been
+ * shipped OUTSIDE of prepship OR shipstation. If there are shipstation records
+ * then it is considered shipped within shipstation. If shipstation has no records
+ * AND we didn't ship out of prepship, then it is considered externally shipped."
  *
- * This is conservative — may produce false positives (e.g. orders shipped
- * before the app was deployed). Q6 resolution may add:
- *   - shipDate before app-launch cutoff
- *   - tracking prefix pattern matching
- *   - external source field
+ * Detection logic (per DJ's Q6 answer):
+ *   1. Does a ShipStation label exist for this order in our store?
+ *      → YES: shipped within ShipStation — NOT externally shipped
+ *   2. Was it shipped via prepship? (order.label from prepship, or status set by prepship)
+ *      → YES: shipped within prepship — NOT externally shipped
+ *   3. Neither condition? AND status === 'shipped'?
+ *      → externally shipped = true
  *
- * @param incoming - Fresh orders from the API
- * @param existing - Current store orders (Map for O(1) lookup)
- * @returns Orders detected as externally shipped
+ * "If shipstation has no records AND we didn't ship out of prepship, then it
+ * is considered externally shipped." — DJ Q6
+ *
+ * @param incoming - Fresh orders from the API (already normalized)
+ * @param existingMap - Current store orders (Map for O(1) lookup)
+ * @param detectedAt - Timestamp to stamp on newly detected external orders
+ * @returns Orders detected as externally shipped (with externallyShippedAt set)
  */
 function detectExternallyShipped(
   incoming: Order[],
   existingMap: Map<string, Order>,
+  detectedAt: Date = new Date(),
 ): Order[] {
-  // Q6 PENDING — current heuristic
   return incoming.filter((order) => {
+    // Only consider orders the API reports as 'shipped'
     if (order.status !== 'shipped') return false;
+
+    // Check existing store record for this order
     const existing = existingMap.get(order.id);
-    if (!existing) return true; // New order already marked shipped — external
-    return !existing.label; // Had no label in our app
+
+    // Q6 check 1: ShipStation label exists? → shipped within ShipStation, not external.
+    // A label in our store means WE created it via ShipStation.
+    const hasShipStationLabel = existing?.label != null;
+    if (hasShipStationLabel) return false;
+
+    // Q6 check 2: Shipped via prepship? → not external.
+    // prepship.shipped is represented by our app having created the label record
+    // (same label field — prepship labels are also stored as order.label).
+    // If the existing order already has externallyShipped=true, preserve it (already detected).
+    // If no existing order at all: this is a new order that's already shipped → external.
+    if (existing?.externallyShipped === true) {
+      // Already detected externally shipped — preserve; re-include to update timestamp if needed
+      return false; // Timestamp was already set; don't re-stamp
+    }
+
+    // Q6 final: no ShipStation record AND not shipped via prepship → externally shipped
+    // (new order arriving already shipped, OR existing order shipped outside the app)
+    order.externallyShipped = true;
+    order.externallyShippedAt = detectedAt;
+    return true;
   });
 }
 
@@ -470,14 +507,22 @@ export async function syncOrders(
     }
   }
 
-  // Detect externally shipped (Q6 heuristic)
-  const externallyShipped = detectExternallyShipped(fetchedOrders, existingMap);
+  // Detect externally shipped orders per DJ's Q6 answer (locked).
+  // NOTE: detectExternallyShipped mutates orders in-place (sets externallyShipped + externallyShippedAt)
+  // and returns the externally-shipped subset.
+  const externallyShipped = detectExternallyShipped(fetchedOrders, existingMap, syncedAt);
 
-  // Mark externally shipped orders
-  const markedOrders = fetchedOrders.map((o) => ({
-    ...o,
-    externallyShipped: externallyShipped.some((e) => e.id === o.id),
-  }));
+  // fetchedOrders already have externallyShipped/externallyShippedAt mutated by detectExternallyShipped;
+  // preserve externallyShipped state from existing orders that aren't in this sync batch.
+  const markedOrders = fetchedOrders.map((o) => {
+    const existing = existingMap.get(o.id);
+    // If the existing order was already marked externally shipped (prior sync detected it),
+    // preserve that state even if this sync batch didn't re-detect it.
+    if (!o.externallyShipped && existing?.externallyShipped) {
+      return { ...o, externallyShipped: true, externallyShippedAt: existing.externallyShippedAt };
+    }
+    return o;
+  });
 
   // Merge with existing store orders
   const allOrders = mergeOrders(existingOrders, markedOrders);

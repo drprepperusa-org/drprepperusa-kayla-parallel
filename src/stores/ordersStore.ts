@@ -125,9 +125,24 @@ interface OrdersState {
    * Updates allOrders, sets lastSyncTime, clears syncing flag.
    *
    * @param syncedAt - Timestamp of the completed sync
-   * @param allOrders - Merged orders from syncService result
+   * @param allOrders - Merged orders from syncService result (may include externally shipped)
    */
   syncComplete: (syncedAt: Date, allOrders: Order[]) => void;
+
+  /**
+   * Mark an order as externally shipped and move it to shipped status.
+   *
+   * Q6 (DJ, LOCKED): "An order is considered externally shipped if it's been shipped
+   * OUTSIDE of prepship OR shipstation. If shipstation has no records AND we didn't
+   * ship out of prepship, then it is considered externally shipped."
+   *
+   * Called automatically by useAutoSync when detectExternallyShipped() fires.
+   * Also moves the order to status='shipped' in the store.
+   *
+   * @param orderId - Internal Order.id (string)
+   * @param detectedAt - Timestamp when external shipment was detected
+   */
+  markExternallyShipped: (orderId: OrderId, detectedAt: Date) => void;
 
   /**
    * Signal that a sync failed.
@@ -347,6 +362,22 @@ export const useOrdersStore = create<OrdersState>((set, get) => ({
         lastSyncError: null,
       },
     });
+  },
+
+  // ── markExternallyShipped: Q6 external shipment handler ───────────────────
+  markExternallyShipped: (orderId, detectedAt) => {
+    set((state) => ({
+      allOrders: state.allOrders.map((o) => {
+        if (o.id !== orderId) return o;
+        // Q6: externally shipped → mark flag + timestamp + move to shipped status
+        return {
+          ...o,
+          externallyShipped: true,
+          externallyShippedAt: detectedAt,
+          status: 'shipped' as const,
+        };
+      }),
+    }));
   },
 
   syncError: (errorMessage) => {
