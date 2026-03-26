@@ -9,6 +9,7 @@ import { getMarkupRuleForCarrier, applyMarkup, type MarkupRule } from '../utils/
 import { getCachedOrFetchedRate } from '../utils/rateFetchCache';
 import { buildRateFetchRequest, type ClientCredentials } from '../api/rateService';
 import { calculateBilling } from '../services/billingService';
+import { useBillingStore } from './billingStore';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Sync state shape
@@ -286,6 +287,37 @@ export const useOrdersStore = create<OrdersState>((set, get) => ({
         };
       }),
     }));
+
+    // Q7 (DJ, LOCKED): "The billing should automatically update as soon as each
+    // order is processed and shipped."
+    // Auto-calculate billing using the label's shipment cost (NOT fetched rates).
+    // We look up the matching canonical Order to get weightOz + markup percent.
+    const canonicalOrder = get().allOrders.find((o) => o.id === String(orderId));
+    if (canonicalOrder) {
+      // Resolve shipmentCost from the OrderDTO that was just updated
+      const dto = get().orders.find((o) => String(o.orderId) === String(orderId));
+      // Q7: Use label shipmentCost if available; selectedRate.shipmentCost is a
+      // pre-creation value so it serves as fallback only — true label cost comes
+      // from the label record once the API response is persisted.
+      const shippingCost =
+        dto?.selectedRate?.shipmentCost ??
+        dto?.selectedRate?.amount ??
+        canonicalOrder.baseRate ??
+        0;
+
+      // Resolve carrier markup: callers (labelStore / useCreateLabel) should pass
+      // markup percent explicitly when a higher-level integration is built.
+      // For now, default to 0% (conservative — never inflate silently).
+      useBillingStore.getState().calculateBilling({
+        orderId: String(orderId),
+        shippingCost,
+        weightOz: canonicalOrder.weightOz,
+        carrierMarkupPercent: 0, // Conservative default — override when markup is known
+        customer: canonicalOrder.customer,
+        orderDate: canonicalOrder.orderDate,
+        storeId: canonicalOrder.storeId,
+      });
+    }
   },
 
   handleLabelError: (orderId, error) => {

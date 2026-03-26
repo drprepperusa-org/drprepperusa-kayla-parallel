@@ -2,6 +2,7 @@ import Layout from './components/Layout/Layout';
 import OrdersView from './components/OrdersView/OrdersView';
 import OrderDetail from './components/OrderDetail';
 import PlaceholderPage from './pages/PlaceholderPage';
+import BillingSection from './components/Billing/BillingSection';
 import { useUIStore } from './stores/uiStore';
 
 export default function App() {
@@ -24,7 +25,7 @@ export default function App() {
       case 'settings':
         return <PlaceholderPage title="Settings" />;
       case 'billing':
-        return <PlaceholderPage title="Billing" />;
+        return <BillingSection />;
       case 'manifests':
         return <PlaceholderPage title="Manifests" />;
       default:
