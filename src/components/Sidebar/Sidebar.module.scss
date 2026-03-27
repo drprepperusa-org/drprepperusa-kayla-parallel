@@ -107,6 +107,11 @@ $sidebar-width: 260px;
   }
 }
 
+.syncRow {
+  padding: 4px 12px 8px;
+  border-bottom: 1px solid $sidebar-border;
+}
+
 .nav {
   flex: 1;
   padding: 8px 0;

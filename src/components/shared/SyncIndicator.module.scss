@@ -1,0 +1,75 @@
+.syncIndicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+
+  &.full {
+    gap: 6px;
+  }
+
+  &.compact {
+    .label { display: none; }
+  }
+}
+
+.dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+
+  &.dotOk {
+    background: #22c55e;
+  }
+
+  &.dotNever {
+    background: rgba(255, 255, 255, 0.25);
+  }
+}
+
+.spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #60a5fa;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.syncBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 14px;
+  padding: 0 2px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s;
+
+  &:hover:not(:disabled) {
+    color: #60a5fa;
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
+}

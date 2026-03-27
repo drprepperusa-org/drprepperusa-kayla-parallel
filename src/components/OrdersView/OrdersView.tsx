@@ -22,6 +22,8 @@ import { useMarkupsStore } from '../../stores/markupsStore';
 import { useOrderDetailStore } from '../../stores/orderDetailStore';
 import { ALL_COLUMNS } from '../Tables/columnDefs';
 import RightPanel from '../RightPanel/RightPanel';
+import StatsBar from '../StatsBar/StatsBar';
+import SyncIndicator from '../shared/SyncIndicator';
 import AgeBadge from './cells/AgeBadge';
 import ClientBadge from './cells/ClientBadge';
 import CarrierBadge from './cells/CarrierBadge';
@@ -35,19 +37,35 @@ import {
 import { applyCarrierMarkup } from '../../utils/markups';
 import styles from './OrdersView.module.scss';
 
+// ─── Types & constants ────────────────────────────────────────────────────────
+
+type ZoomLevel = '100%' | '115%' | '125%';
+
+const ZOOM_SCALE: Record<ZoomLevel, number> = {
+  '100%': 1,
+  '115%': 1.15,
+  '125%': 1.25,
+};
+
+const ZOOM_LEVELS: ZoomLevel[] = ['100%', '115%', '125%'];
+
 const STATUS_LABELS: Record<OrderStatus, string> = {
-  awaiting_shipment: 'Awaiting',
+  awaiting_shipment: 'Awaiting Shipment',
   shipped: 'Shipped',
   cancelled: 'Cancelled',
 };
 
 const STATUSES: OrderStatus[] = ['awaiting_shipment', 'shipped', 'cancelled'];
 
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export default function OrdersView() {
   const {
     orders, loading, total, page, pages, currentStatus,
     setStatus, setPage, selectedOrderIds, toggleOrderSelection,
     selectAllOrders, clearSelection, fetchOrders,
+    sync, startSync,
+    zoom, setZoom,
   } = useOrdersStore();
   const { stores, statusCounts, fetchStores, fetchStatusCounts } = useStoresStore();
   const { markups } = useMarkupsStore();
@@ -70,6 +88,7 @@ export default function OrdersView() {
 
   const visibleColumns = ALL_COLUMNS.filter(c => c.defaultVisible);
   const allSelected = orders.length > 0 && orders.every(o => selectedOrderIds.has(o.orderId));
+  const selectedCount = selectedOrderIds.size;
 
   const handleSelectAll = () => {
     if (allSelected) clearSelection();
@@ -86,6 +105,22 @@ export default function OrdersView() {
   const handleRowClick = (orderId: number) => {
     void openDetail(orderId);
   };
+
+  const handleSync = () => {
+    startSync();
+  };
+
+  const handleZoom = (level: ZoomLevel) => {
+    setZoom(ZOOM_SCALE[level] as 1 | 1.15 | 1.25);
+  };
+
+  // Derive active zoom level label from store value
+  const activeZoomLabel: ZoomLevel = (() => {
+    const z = zoom ?? 1;
+    if (z >= 1.25) return '125%';
+    if (z >= 1.15) return '115%';
+    return '100%';
+  })();
 
   const renderCell = (order: OrderDTO, key: string) => {
     switch (key) {
@@ -187,9 +222,13 @@ export default function OrdersView() {
     <div className={styles.ordersLayout}>
       {/* LEFT: table area */}
       <div className={styles.container}>
-        {/* Toolbar */}
+        {/* ── Section 5: Header / Toolbar ──────────────────────────────── */}
         <div className={styles.toolbar}>
+          {/* Left: current status title */}
           <div className={styles.toolbarLeft}>
+            <h2 className={styles.statusTitle}>{STATUS_LABELS[currentStatus]}</h2>
+
+            {/* Status tabs for switching */}
             <div className={styles.statusTabs}>
               {STATUSES.map((s) => (
                 <button
@@ -202,32 +241,81 @@ export default function OrdersView() {
               ))}
             </div>
           </div>
+
+          {/* Right: context-sensitive tools */}
           <div className={styles.toolbarRight}>
-            {selectedOrderIds.size > 0 && (
+            {selectedCount > 0 ? (
+              /* ── Selection mode toolbar ── */
               <>
-                <span className={styles.selectionBadge}>{selectedOrderIds.size} selected</span>
+                <span className={styles.selectionPill}>
+                  {selectedCount} {selectedCount === 1 ? 'order' : 'orders'} selected
+                  <button
+                    className={styles.selectionClear}
+                    onClick={clearSelection}
+                    aria-label="Clear selection"
+                  >
+                    ×
+                  </button>
+                </span>
                 <button className={styles.toolbarBtn}>Batch ▼</button>
                 <button className={styles.toolbarBtn}>Print ▼</button>
+              </>
+            ) : (
+              /* ── Default toolbar ── */
+              <>
+                <SyncIndicator
+                  syncing={sync.syncing}
+                  lastSyncTime={sync.lastSyncTime}
+                  variant="full"
+                />
                 <button
-                  className={styles.toolbarBtnClear}
-                  onClick={clearSelection}
-                  title="Clear selection"
+                  className={styles.toolbarBtn}
+                  onClick={handleSync}
+                  disabled={sync.syncing}
+                  title="Sync orders now"
                 >
-                  ✕
+                  ↻ Sync
                 </button>
+                <button className={styles.toolbarBtn}>Export CSV</button>
+                <button className={styles.toolbarBtn}>Columns ▼</button>
+                <button className={styles.toolbarBtn}>Labels</button>
+                <button className={styles.toolbarBtn}>Print Queue</button>
               </>
             )}
-            <span>{total} orders</span>
+
+            {/* Zoom selector — always visible */}
+            <div className={styles.zoomSelector} role="group" aria-label="Zoom level">
+              {ZOOM_LEVELS.map((level) => (
+                <button
+                  key={level}
+                  className={`${styles.zoomBtn} ${activeZoomLabel === level ? styles.zoomActive : ''}`}
+                  onClick={() => handleZoom(level)}
+                  aria-pressed={activeZoomLabel === level}
+                >
+                  {level}
+                </button>
+              ))}
+            </div>
+
+            {selectedCount === 0 && (
+              <button className={styles.toolbarBtn}>Picklist</button>
+            )}
           </div>
         </div>
 
+        {/* ── Section 2: Stats Bar ─────────────────────────────────────── */}
+        <StatsBar />
+
         {/* Table */}
-        {loading ? (
-          <div className={styles.loading}>Loading orders…</div>
-        ) : orders.length === 0 ? (
-          <div className={styles.emptyState}>No orders found</div>
-        ) : (
-          <div className={styles.tableWrapper}>
+        <div
+          className={styles.tableWrapper}
+          style={{ fontSize: `${(zoom ?? 1) * 14}px` }}
+        >
+          {loading ? (
+            <div className={styles.loading}>Loading orders…</div>
+          ) : orders.length === 0 ? (
+            <div className={styles.emptyState}>No orders found</div>
+          ) : (
             <table className={styles.table}>
               <thead className={styles.thead}>
                 <tr>
@@ -328,8 +416,8 @@ export default function OrdersView() {
                 })}
               </tbody>
             </table>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Pagination */}
         {pages > 1 && (

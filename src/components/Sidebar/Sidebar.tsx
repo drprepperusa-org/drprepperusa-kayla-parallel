@@ -1,7 +1,16 @@
+/**
+ * Sidebar — Section 3 (revised)
+ *
+ * Navigation tree with collapsible groups per OrderStatus.
+ * Reads allOrders for live per-client counts.
+ * Shows SyncIndicator in footer.
+ */
+
 import { useState, useCallback, useRef, useMemo } from 'react';
 import { useUIStore, type ViewType } from '../../stores/uiStore';
 import { useOrdersStore } from '../../stores/ordersStore';
 import { useStoresStore } from '../../stores/storesStore';
+import SyncIndicator from '../shared/SyncIndicator';
 import type { OrderStatus } from '../../types/orders';
 import styles from './Sidebar.module.scss';
 
@@ -15,10 +24,10 @@ const TOOL_ITEMS: Array<{ view: ViewType; icon: string; label: string }> = [
   { view: 'inventory', icon: '📦', label: 'Inventory' },
   { view: 'locations', icon: '📍', label: 'Locations' },
   { view: 'packages', icon: '📐', label: 'Packages' },
-  { view: 'rates', icon: '💰', label: 'Rate Shop' },
+  { view: 'rates', icon: '🔍', label: 'Rate Shop' },
   { view: 'analysis', icon: '📊', label: 'Analysis' },
   { view: 'settings', icon: '⚙️', label: 'Settings' },
-  { view: 'billing', icon: '🧾', label: 'Billing' },
+  { view: 'billing', icon: '💰', label: 'Billing' },
   { view: 'manifests', icon: '📋', label: 'Manifests' },
 ];
 
@@ -26,7 +35,7 @@ const STATUSES: OrderStatus[] = ['awaiting_shipment', 'shipped', 'cancelled'];
 
 export default function Sidebar() {
   const { setView, sidebarOpen, setSidebarOpen } = useUIStore();
-  const { currentStatus, activeClient, setNavFilter, setSearchQuery, allOrders } = useOrdersStore();
+  const { currentStatus, activeClient, setNavFilter, setSearchQuery, allOrders, sync, startSync } = useOrdersStore();
   const { stores } = useStoresStore();
 
   const [expandedSections, setExpandedSections] = useState<Set<OrderStatus>>(
@@ -35,34 +44,33 @@ export default function Sidebar() {
   const [searchValue, setSearchValue] = useState('');
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Derived counts from allOrders (or fall back to mock store counts) ──────
-  // clientId in Order is a string; storeDTO.clientId is a number.
-  // We build counts keyed by String(clientId).
-  const countsByStatus = useMemo(() => {
-    const result: Record<OrderStatus, { total: number; byClient: Record<string, number> }> = {
-      awaiting_shipment: { total: 0, byClient: {} },
-      shipped: { total: 0, byClient: {} },
-      cancelled: { total: 0, byClient: {} },
+  // ── Derived nav counts from allOrders ────────────────────────────────────
+  // navCounts[status][clientId] = count
+  const navCounts = useMemo(() => {
+    const counts: Record<string, Record<string, number>> = {
+      awaiting_shipment: {},
+      shipped: {},
+      cancelled: {},
     };
-    for (const o of allOrders) {
-      const s = o.status as OrderStatus;
-      if (!result[s]) continue;
-      result[s].total++;
-      const cid = String(o.clientId);
-      result[s].byClient[cid] = (result[s].byClient[cid] ?? 0) + 1;
+    for (const order of allOrders) {
+      const status = order.status;
+      const client = order.clientId;
+      if (counts[status]) {
+        counts[status][client] = (counts[status][client] ?? 0) + 1;
+      }
     }
-    return result;
+    return counts;
   }, [allOrders]);
 
-  // When allOrders is empty (pre-sync), we fall back to storesStore counts + mock data totals.
-  // The sidebar will show "—" badges until first sync.
   const getStatusTotal = (status: OrderStatus): number | null => {
-    if (allOrders.length > 0) return countsByStatus[status].total;
-    return null; // will render as "—"
+    if (allOrders.length > 0) {
+      return Object.values(navCounts[status] ?? {}).reduce((a, b) => a + b, 0);
+    }
+    return null; // will render as "—" pre-sync
   };
 
   const getClientCount = (status: OrderStatus, clientId: string): number => {
-    return countsByStatus[status].byClient[clientId] ?? 0;
+    return navCounts[status]?.[clientId] ?? 0;
   };
 
   const toggleSection = (status: OrderStatus) => {
@@ -84,6 +92,17 @@ export default function Sidebar() {
   const handleClearSearch = () => {
     setSearchValue('');
     setSearchQuery('');
+  };
+
+  // Build sorted client list per status (sorted by count desc)
+  const getSortedClients = (status: OrderStatus) => {
+    return stores
+      .map((store) => ({
+        clientId: String(store.clientId),
+        name: store.name,
+        count: getClientCount(status, String(store.clientId)),
+      }))
+      .sort((a, b) => b.count - a.count);
   };
 
   return (
@@ -108,12 +127,23 @@ export default function Sidebar() {
             placeholder="Search Orders…"
             value={searchValue}
             onChange={(e) => handleSearchChange(e.target.value)}
+            aria-label="Search orders"
           />
           {searchValue && (
-            <button className={styles.clearBtn} onClick={handleClearSearch}>
+            <button className={styles.clearBtn} onClick={handleClearSearch} aria-label="Clear search">
               ✕
             </button>
           )}
+        </div>
+
+        {/* Sync indicator (below search) */}
+        <div className={styles.syncRow}>
+          <SyncIndicator
+            syncing={sync.syncing}
+            lastSyncTime={sync.lastSyncTime}
+            onManualSync={startSync}
+            variant="full"
+          />
         </div>
 
         {/* Nav tree */}
@@ -121,6 +151,7 @@ export default function Sidebar() {
           {STATUSES.map((status) => {
             const total = getStatusTotal(status);
             const isExpanded = expandedSections.has(status);
+            const sortedClients = getSortedClients(status);
 
             return (
               <div
@@ -134,6 +165,15 @@ export default function Sidebar() {
                     setNavFilter(status, null);
                     setView('orders');
                   }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      setNavFilter(status, null);
+                      setView('orders');
+                    }
+                  }}
+                  aria-expanded={isExpanded}
                 >
                   <span
                     className={styles.arrow}
@@ -141,6 +181,7 @@ export default function Sidebar() {
                       e.stopPropagation();
                       toggleSection(status);
                     }}
+                    aria-label={isExpanded ? 'Collapse' : 'Expand'}
                   >
                     ▶
                   </span>
@@ -148,14 +189,10 @@ export default function Sidebar() {
                   <span className={styles.badge}>{total ?? '—'}</span>
                 </div>
 
-                {/* Children: per-client rows */}
+                {/* Children: per-client rows, sorted by count desc */}
                 {isExpanded && (
                   <div className={styles.storeList}>
-                    {stores.map((store) => {
-                      const clientId = String(store.clientId);
-                      const count = allOrders.length > 0
-                        ? getClientCount(status, clientId)
-                        : 0;
+                    {sortedClients.map(({ clientId, name, count }) => {
                       const isSelected = currentStatus === status && activeClient === clientId;
                       return (
                         <div
@@ -165,8 +202,16 @@ export default function Sidebar() {
                             setNavFilter(status, clientId);
                             setView('orders');
                           }}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              setNavFilter(status, clientId);
+                              setView('orders');
+                            }
+                          }}
                         >
-                          <span className={styles.storeName}>{store.name}</span>
+                          <span className={styles.storeName}>{name}</span>
                           <span className={styles.storeCount}>{count}</span>
                         </div>
                       );
@@ -186,6 +231,11 @@ export default function Sidebar() {
                 key={view}
                 className={styles.toolItem}
                 onClick={() => setView(view)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') setView(view);
+                }}
               >
                 <span className={styles.toolIcon}>{icon}</span> {label}
               </div>
