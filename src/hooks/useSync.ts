@@ -24,7 +24,8 @@
 import { useState, useCallback } from 'react';
 import { useOrdersStore } from '../stores/ordersStore';
 import { SyncServiceError, type SyncServiceErrorCode } from '../services/syncService';
-import { syncViaProxy } from '../api/proxyClient';
+import { syncViaProxy, type NormalizedOrder } from '../api/proxyClient';
+import type { Order } from '../types/orders';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Hook return type
@@ -130,10 +131,59 @@ export function useSync(): UseSyncReturn {
       const { data } = outcome;
       const syncedAt = new Date(data.syncedAt);
 
-      // Update the store — proxy sync returns stats, not full order objects.
-      // Pass current allOrders unchanged (server handles merge on real integration).
-      const currentAllOrders = useOrdersStore.getState().allOrders;
-      syncComplete(syncedAt, currentAllOrders);
+      // Deserialize NormalizedOrder (from server) → Order (domain type).
+      // Server returns orderDate/createdAt/lastUpdatedAt as ISO strings;
+      // the store and rest of the app expect Date objects.
+      const orders: Order[] = (data.orders ?? []).map((raw: NormalizedOrder): Order => ({
+        id: raw.id,
+        orderNum: raw.orderNum,
+        orderId: raw.orderId,
+        clientId: raw.clientId,
+        storeId: raw.storeId,
+        orderDate: new Date(raw.orderDate),
+        createdAt: new Date(raw.createdAt),
+        lastUpdatedAt: new Date(raw.lastUpdatedAt),
+        customer: raw.customer,
+        shipTo: {
+          name: raw.shipTo.name,
+          company: raw.shipTo.company,
+          street1: raw.shipTo.street1,
+          street2: raw.shipTo.street2,
+          city: raw.shipTo.city,
+          state: raw.shipTo.state,
+          postalCode: raw.shipTo.postalCode,
+          country: raw.shipTo.country,
+          residential: raw.shipTo.residential,
+          phone: raw.shipTo.phone,
+        },
+        // shipFrom not returned by sync endpoint — use empty placeholder
+        shipFrom: {
+          name: '',
+          street1: '',
+          city: '',
+          state: '',
+          postalCode: '',
+          country: 'US',
+        },
+        items: raw.items.map((item) => ({
+          id: item.id,
+          sku: item.sku,
+          name: item.name,
+          quantity: item.quantity,
+          weightOz: item.weightOz,
+        })),
+        itemCount: raw.itemCount,
+        itemNames: raw.items.map((item) => item.name),
+        skus: raw.items.map((item) => item.sku),
+        weightOz: raw.weightOz,
+        dimensions: { lengthIn: 0, widthIn: 0, heightIn: 0 },
+        baseRate: 0,
+        status: (raw.status as Order['status']) ?? 'awaiting_shipment',
+        externallyShipped: raw.externallyShipped,
+      }));
+
+      // Update the store with real orders from ShipStation
+      syncComplete(syncedAt, orders);
 
       setError(null);
       setLastSyncStats({

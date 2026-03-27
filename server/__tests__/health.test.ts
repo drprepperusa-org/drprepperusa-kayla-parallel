@@ -6,6 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { app } from '../server.js';
+import { TEST_API_KEY } from './setup.js';
 
 describe('GET /health', () => {
   it('returns 200 with service info', async () => {
@@ -21,6 +22,7 @@ describe('GET /health', () => {
   it('404 for unknown route', async () => {
     const res = await request(app)
       .get('/api/unknown-endpoint')
+      .set('x-api-key', TEST_API_KEY)
       .expect(404);
 
     expect(res.body.code).toBe('NOT_FOUND');

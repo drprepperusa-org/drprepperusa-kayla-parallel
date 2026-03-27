@@ -7,6 +7,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
 import { app } from '../../server.js';
 import { createServerShipStationClient } from '../../lib/shipstation.js';
+import { TEST_API_KEY } from '../setup.js';
 
 vi.mock('../../lib/shipstation.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/shipstation.js')>();
@@ -84,6 +85,7 @@ describe('POST /api/sync', () => {
   it('syncs orders without lastSyncTime (full sync)', async () => {
     const res = await request(app)
       .post('/api/sync')
+      .set('x-api-key', TEST_API_KEY)
       .send({})
       .expect(200);
 
@@ -98,6 +100,7 @@ describe('POST /api/sync', () => {
     const lastSyncTime = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     const res = await request(app)
       .post('/api/sync')
+      .set('x-api-key', TEST_API_KEY)
       .send({ lastSyncTime })
       .expect(200);
 
@@ -108,6 +111,7 @@ describe('POST /api/sync', () => {
   it('returns 400 for invalid lastSyncTime', async () => {
     const res = await request(app)
       .post('/api/sync')
+      .set('x-api-key', TEST_API_KEY)
       .send({ lastSyncTime: 'not-a-date' })
       .expect(400);
 
@@ -117,6 +121,7 @@ describe('POST /api/sync', () => {
   it('normalizes order fields correctly', async () => {
     const res = await request(app)
       .post('/api/sync')
+      .set('x-api-key', TEST_API_KEY)
       .send({})
       .expect(200);
 
@@ -143,6 +148,7 @@ describe('POST /api/sync', () => {
 
     const res = await request(app)
       .post('/api/sync')
+      .set('x-api-key', TEST_API_KEY)
       .send({})
       .expect(200);
 
@@ -161,6 +167,7 @@ describe('POST /api/sync', () => {
 
     const res = await request(app)
       .post('/api/sync')
+      .set('x-api-key', TEST_API_KEY)
       .send({})
       .expect(401);
 
@@ -178,6 +185,7 @@ describe('POST /api/sync', () => {
 
     const res = await request(app)
       .post('/api/sync')
+      .set('x-api-key', TEST_API_KEY)
       .send({})
       .expect(429);
 
@@ -195,6 +203,7 @@ describe('POST /api/sync', () => {
 
     const res = await request(app)
       .post('/api/sync')
+      .set('x-api-key', TEST_API_KEY)
       .send({})
       .expect(502);
 

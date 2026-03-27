@@ -202,11 +202,54 @@ export const useOrdersStore = create<OrdersState>((set, get) => ({
   clearSelection: () => set({ selectedOrderIds: new Set() }),
 
   fetchOrders: async () => {
-    const { currentStatus, page, pageSize } = get();
+    const { currentStatus, page, pageSize, allOrders } = get();
     set({ loading: true, error: null });
     try {
-      const result = getMockOrdersByStatus(currentStatus, page, pageSize);
-      set({ orders: result.orders, total: result.total, pages: result.pages, loading: false });
+      // Use real synced orders from allOrders if available; fall back to mock data
+      // only when allOrders is empty (pre-sync state).
+      if (allOrders.length > 0) {
+        // Filter by status and paginate in-memory
+        const filtered = allOrders.filter((o) => o.status === currentStatus);
+        const total = filtered.length;
+        const pages = pageSize > 0 ? Math.ceil(total / pageSize) : 1;
+        const start = (page - 1) * pageSize;
+        const pageOrders = filtered.slice(start, start + pageSize);
+
+        // Map Order → OrderDTO shape for the paginated view
+        const orderDTOs: OrderDTO[] = pageOrders.map((o): OrderDTO => ({
+          orderId: o.orderId,
+          orderNumber: o.orderNum,
+          createdAt: o.createdAt.toISOString(),
+          updatedAt: o.lastUpdatedAt.toISOString(),
+          clientId: Number(o.clientId) || 0,
+          storeId: o.storeId ?? 0,
+          status: o.status,
+          shipTo: {
+            name: o.shipTo.name,
+            company: o.shipTo.company,
+            street1: o.shipTo.street1,
+            street2: o.shipTo.street2,
+            city: o.shipTo.city,
+            state: o.shipTo.state,
+            postalCode: o.shipTo.postalCode,
+            country: o.shipTo.country,
+          },
+          residential: o.shipTo.residential,
+          trackingNumber: o.label?.trackingNumber,
+          labelCreated: o.label?.createdAt.toISOString(),
+          selectedCarrierCode: o.label?.v1CarrierCode ?? o.label?.v2CarrierCode,
+          selectedRate: undefined,
+          enrichedRate: undefined,
+          ratesFetched: false,
+          rateError: undefined,
+        }));
+
+        set({ orders: orderDTOs, total, pages, loading: false });
+      } else {
+        // Fallback: show mock data when no real orders loaded yet
+        const result = getMockOrdersByStatus(currentStatus, page, pageSize);
+        set({ orders: result.orders, total: result.total, pages: result.pages, loading: false });
+      }
     } catch (err) {
       set({ loading: false, error: err instanceof Error ? err.message : 'Unknown error' });
     }
@@ -394,6 +437,8 @@ export const useOrdersStore = create<OrdersState>((set, get) => ({
         lastSyncError: null,
       },
     });
+    // Refresh paginated view with real orders now that allOrders is populated
+    void get().fetchOrders();
   },
 
   // ── markExternallyShipped: Q6 external shipment handler ───────────────────

@@ -6,6 +6,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
 import { app } from '../../server.js';
+import { TEST_API_KEY } from '../setup.js';
 import { createServerShipStationClient } from '../../lib/shipstation.js';
 
 vi.mock('../../lib/shipstation.js', async (importOriginal) => {
@@ -70,6 +71,7 @@ describe('POST /api/labels', () => {
   it('returns 400 if body is missing', async () => {
     const res = await request(app)
       .post('/api/labels')
+      .set('x-api-key', TEST_API_KEY)
       .expect(400);
 
     expect(res.body.code).toBe('VALIDATION_ERROR');
@@ -79,6 +81,7 @@ describe('POST /api/labels', () => {
     const { orderId: _omit, ...body } = VALID_BODY;
     const res = await request(app)
       .post('/api/labels')
+      .set('x-api-key', TEST_API_KEY)
       .send(body)
       .expect(400);
 
@@ -90,6 +93,7 @@ describe('POST /api/labels', () => {
     const { carrierCode: _omit, ...body } = VALID_BODY;
     const res = await request(app)
       .post('/api/labels')
+      .set('x-api-key', TEST_API_KEY)
       .send(body)
       .expect(400);
 
@@ -101,6 +105,7 @@ describe('POST /api/labels', () => {
     const { serviceCode: _omit, ...body } = VALID_BODY;
     const res = await request(app)
       .post('/api/labels')
+      .set('x-api-key', TEST_API_KEY)
       .send(body)
       .expect(400);
 
@@ -111,6 +116,7 @@ describe('POST /api/labels', () => {
   it('returns 400 if weightOz <= 0', async () => {
     const res = await request(app)
       .post('/api/labels')
+      .set('x-api-key', TEST_API_KEY)
       .send({ ...VALID_BODY, weightOz: 0 })
       .expect(400);
 
@@ -121,6 +127,7 @@ describe('POST /api/labels', () => {
     const { dimensions: _omit, ...body } = VALID_BODY;
     const res = await request(app)
       .post('/api/labels')
+      .set('x-api-key', TEST_API_KEY)
       .send(body)
       .expect(400);
 
@@ -132,6 +139,7 @@ describe('POST /api/labels', () => {
     const { shipTo: _omit, ...body } = VALID_BODY;
     const res = await request(app)
       .post('/api/labels')
+      .set('x-api-key', TEST_API_KEY)
       .send(body)
       .expect(400);
 
@@ -142,6 +150,7 @@ describe('POST /api/labels', () => {
   it('creates label successfully', async () => {
     const res = await request(app)
       .post('/api/labels')
+      .set('x-api-key', TEST_API_KEY)
       .send(VALID_BODY)
       .expect(200);
 
@@ -164,6 +173,7 @@ describe('POST /api/labels', () => {
 
     const res = await request(app)
       .post('/api/labels')
+      .set('x-api-key', TEST_API_KEY)
       .send(VALID_BODY)
       .expect(401);
 
@@ -181,6 +191,7 @@ describe('POST /api/labels', () => {
 
     const res = await request(app)
       .post('/api/labels')
+      .set('x-api-key', TEST_API_KEY)
       .send(VALID_BODY)
       .expect(429);
 
@@ -199,6 +210,7 @@ describe('POST /api/labels', () => {
 
     const res = await request(app)
       .post('/api/labels')
+      .set('x-api-key', TEST_API_KEY)
       .send(VALID_BODY)
       .expect(400);
 
@@ -216,6 +228,7 @@ describe('POST /api/labels', () => {
 
     const res = await request(app)
       .post('/api/labels')
+      .set('x-api-key', TEST_API_KEY)
       .send(VALID_BODY)
       .expect(502);
 

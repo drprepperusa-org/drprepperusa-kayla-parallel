@@ -199,12 +199,51 @@ export interface SyncProxyRequest {
   lastSyncTime: string | null;
 }
 
+export interface NormalizedOrderItem {
+  id: string;
+  sku: string;
+  name: string;
+  quantity: number;
+  weightOz: number;
+}
+
+export interface NormalizedOrder {
+  id: string;
+  orderNum: string;
+  orderId: number;
+  clientId: string;
+  storeId?: number;
+  /** ISO date string — deserialize to Date before passing to store. */
+  orderDate: string;
+  createdAt: string;
+  lastUpdatedAt: string;
+  customer: string;
+  shipTo: {
+    name: string;
+    company?: string;
+    street1: string;
+    street2?: string;
+    city: string;
+    state: string;
+    postalCode: string;
+    country: string;
+    residential: boolean;
+    phone?: string;
+  };
+  items: NormalizedOrderItem[];
+  itemCount: number;
+  weightOz: number;
+  status: string;
+  externallyShipped: boolean;
+}
+
 export interface SyncProxyResponse {
   syncedAt: string;
   newOrders: number;
   updatedOrders: number;
   externallyShipped: number;
   fetchedCount: number;
+  orders: NormalizedOrder[];
 }
 
 /**

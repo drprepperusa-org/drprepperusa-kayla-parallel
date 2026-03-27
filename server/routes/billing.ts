@@ -95,6 +95,7 @@ function toResponse(row: BillingRow): BillingResponse {
 
 interface BillingCalcInput {
   shippingCost: number;
+  residentialSurcharge?: number; // default 0; added to base before markup
   weightOz: number;
   carrierMarkupPercent: number;
   prepCost?: number;         // from settings if not provided
@@ -110,6 +111,34 @@ interface BillingCalcResult {
   subtotal: number;
   totalCost: number;
   breakdown: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Banker's rounding (IEEE 754 round-half-to-even) — matches frontend billingService
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Round a dollar amount to the nearest cent using banker's rounding.
+ * Eliminates upward bias at 0.5 boundaries.
+ * Must match frontend src/services/billingService.ts roundToNearestCent().
+ */
+function roundToNearestCent(amount: number): number {
+  const scaled = amount * 100;
+  const floor = Math.floor(scaled);
+  const fraction = scaled - floor;
+
+  const EPSILON = 1e-10;
+  const isHalf = Math.abs(fraction - 0.5) < EPSILON;
+
+  let rounded: number;
+  if (isHalf) {
+    // Round to even
+    rounded = floor % 2 === 0 ? floor : floor + 1;
+  } else {
+    rounded = Math.round(scaled);
+  }
+
+  return rounded / 100;
 }
 
 async function calculateBilling(input: BillingCalcInput, clientId?: string): Promise<BillingCalcResult> {
@@ -128,14 +157,21 @@ async function calculateBilling(input: BillingCalcInput, clientId?: string): Pro
   const prepCost = input.prepCost ?? Number(settings?.prep_cost ?? 0);
   const packageCostPerOz = input.packageCostPerOz ?? Number(settings?.package_cost_per_oz ?? 0);
   const packageCost = packageCostPerOz * input.weightOz;
-  const markupAmount = (input.shippingCost * input.carrierMarkupPercent) / 100;
-  const subtotal = input.shippingCost + markupAmount + prepCost + packageCost;
+  const residentialSurcharge = input.residentialSurcharge ?? 0;
 
-  // Banker's rounding (round half to even)
-  const totalCost = Math.round(subtotal * 100) / 100;
+  // LOCKED FORMULA (matches frontend billingService.ts):
+  //   baseRate = shippingCost + residentialSurcharge
+  //   markupAmount = baseRate × (carrierMarkupPercent / 100)
+  //   totalCost = roundToNearestCent(baseRate + markupAmount + prepCost + packageCost)
+  const baseRate = input.shippingCost + residentialSurcharge;
+  const markupAmount = baseRate * (input.carrierMarkupPercent / 100);
+  const subtotal = baseRate + markupAmount + prepCost + packageCost;
+  const totalCost = roundToNearestCent(subtotal);
 
   const breakdown = JSON.stringify({
     shippingCost: input.shippingCost,
+    residentialSurcharge,
+    baseRate,
     markupPercent: input.carrierMarkupPercent,
     markupAmount,
     prepCost,
@@ -143,7 +179,7 @@ async function calculateBilling(input: BillingCalcInput, clientId?: string): Pro
     weightOz: input.weightOz,
     packageCost,
     subtotal,
-    roundingMethod: 'bankers',
+    roundingMethod: 'bankers_round_half_to_even',
   });
 
   return {
