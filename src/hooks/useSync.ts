@@ -34,7 +34,10 @@ export function useSync() {
       }),
     onMutate: () => startSync(),
     onSuccess: (result) => {
-      syncComplete(new Date(result.lastSyncTime), []);
+      // Pass existing allOrders — backend sync returns a count, not the order data.
+      // allOrders will be refreshed separately when the orders query is invalidated.
+      const existingOrders = useOrdersStore.getState().allOrders;
+      syncComplete(new Date(result.lastSyncTime), existingOrders);
       void queryClient.invalidateQueries({ queryKey: ['orders'] });
     },
     onError: (err) => {
