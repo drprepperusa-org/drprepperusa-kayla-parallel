@@ -1,0 +1,123 @@
+// ─── Design tokens ───────────────────────────────────────────────────────────
+$stats-bg: #f9fafb;
+$stats-border: #e5e7eb;
+$text-primary: #111827;
+$text-secondary: #6b7280;
+$accent: #2563eb;
+$warn: #d97706;
+$success: #059669;
+
+.statsBar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 20px;
+  background: $stats-bg;
+  border-bottom: 1px solid $stats-border;
+  min-height: 44px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+// ─── Date range ───────────────────────────────────────────────────────────────
+
+.dateRange {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: $text-primary;
+  white-space: nowrap;
+}
+
+.dateIcon {
+  font-size: 14px;
+}
+
+.dateLabel {
+  font-weight: 500;
+}
+
+// ─── Divider ─────────────────────────────────────────────────────────────────
+
+.divider {
+  width: 1px;
+  height: 20px;
+  background: $stats-border;
+  flex-shrink: 0;
+}
+
+// ─── Stat chips ──────────────────────────────────────────────────────────────
+
+.chips {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+
+  &.chipWarn .chipValue {
+    color: $warn;
+    font-weight: 700;
+  }
+}
+
+.chipValue {
+  font-size: 15px;
+  font-weight: 700;
+  color: $text-primary;
+  min-width: 16px;
+  text-align: right;
+}
+
+.chipLabel {
+  font-size: 12px;
+  color: $text-secondary;
+  white-space: nowrap;
+}
+
+.chipSep {
+  color: $stats-border;
+  font-size: 14px;
+  user-select: none;
+}
+
+// ─── Progress bar ─────────────────────────────────────────────────────────────
+
+.progressSection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto; // push to the right
+}
+
+.progressBar {
+  width: 100px;
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 3px;
+  overflow: hidden;
+
+  @media (max-width: 600px) {
+    width: 60px;
+  }
+}
+
+.progressFill {
+  height: 100%;
+  background: $success;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.progressLabel {
+  font-size: 12px;
+  color: $text-secondary;
+  white-space: nowrap;
+}

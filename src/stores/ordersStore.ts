@@ -44,6 +44,10 @@ interface OrdersState {
   dateEnd: string | null;
   selectedOrderIds: Set<number>;
 
+  // ── UI: Zoom level for table (1 = 100%, 1.15 = 115%, 1.25 = 125%) ────────
+  zoom: 1 | 1.15 | 1.25;
+  setZoom: (zoom: 1 | 1.15 | 1.25) => void;
+
   // ── Canonical all-orders list (Order domain type, used by sync + hooks) ───
   /**
    * Full list of all known orders (canonical Order domain type).
@@ -175,6 +179,10 @@ export const useOrdersStore = create<OrdersState>((set, get) => ({
   dateStart: null,
   dateEnd: null,
   selectedOrderIds: new Set(),
+
+  // ── UI zoom ───────────────────────────────────────────────────────────────
+  zoom: 1,
+  setZoom: (zoom) => set({ zoom }),
 
   // ── Initial state: canonical orders + sync ────────────────────────────────
   allOrders: [],
