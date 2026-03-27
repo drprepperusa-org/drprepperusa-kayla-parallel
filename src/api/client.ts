@@ -1,41 +1,79 @@
 /**
- * API client for PrepShip backend
- * Uses demo/mock data when API is unavailable
+ * Base API client for PrepShip backend.
+ * Provides typed request helper + ApiError for React Query consumers.
  */
 
 import type { OrderDTO, ListOrdersResponse, StoreDTO } from '../types/orders';
 import type { MarkupsMap } from '../types/markups';
 
-const API_BASE = import.meta.env.PUBLIC_API_BASE || '/api';
+// Base URL from env
+const API_BASE = (import.meta.env as Record<string, string>).PUBLIC_API_BASE ?? '/api';
 
-async function request<T>(
+// ---------------------------------------------------------------------------
+// ApiError — structured error for query/mutation error handling
+// ---------------------------------------------------------------------------
+
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// apiRequest — generic fetch helper used by all hooks and the legacy apiClient
+// ---------------------------------------------------------------------------
+
+export async function apiRequest<T>(
   method: 'GET' | 'POST' | 'PUT' | 'DELETE',
-  endpoint: string,
-  options?: { body?: unknown; query?: Record<string, string | number | boolean | undefined> }
+  path: string,
+  options?: {
+    body?: unknown;
+    query?: Record<string, string | number | boolean | undefined | null>;
+  }
 ): Promise<T> {
-  const url = new URL(`${API_BASE}${endpoint}`, window.location.origin);
+  const url = new URL(`${API_BASE}${path}`, window.location.origin);
+
   if (options?.query) {
-    Object.entries(options.query).forEach(([key, value]) => {
+    for (const [key, value] of Object.entries(options.query)) {
       if (value !== undefined && value !== null) {
         url.searchParams.append(key, String(value));
       }
-    });
+    }
   }
 
-  const fetchOptions: RequestInit = {
+  const proxyApiKey = (import.meta.env as Record<string, string>).PUBLIC_PROXY_API_KEY ?? '';
+
+  const response = await fetch(url.toString(), {
     method,
-    headers: { 'Content-Type': 'application/json' },
-  };
-  if (options?.body) {
-    fetchOptions.body = JSON.stringify(options.body);
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': proxyApiKey,
+    },
+    body: options?.body !== undefined ? JSON.stringify(options.body) : undefined,
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    let code = 'UNKNOWN_ERROR';
+    try {
+      const json = JSON.parse(text) as { code?: string };
+      code = json.code ?? code;
+    } catch { /* ignore */ }
+    throw new ApiError(response.status, code, `${method} ${path}: ${response.status} ${response.statusText}`);
   }
 
-  const response = await fetch(url.toString(), fetchOptions);
-  if (!response.ok) {
-    throw new Error(`API ${method} ${endpoint}: ${response.status} ${response.statusText}`);
-  }
+  if (response.status === 204) return undefined as unknown as T;
   return response.json() as Promise<T>;
 }
+
+// ---------------------------------------------------------------------------
+// apiClient — named methods for components that haven't migrated to hooks yet
+// ---------------------------------------------------------------------------
 
 export const apiClient = {
   listOrders: (query: {
@@ -46,17 +84,19 @@ export const apiClient = {
     clientId?: number;
     dateStart?: string;
     dateEnd?: string;
-  }) => request<ListOrdersResponse>('GET', '/orders', { query: query as Record<string, string | number | boolean | undefined> }),
+  }) => apiRequest<ListOrdersResponse>('GET', '/orders', { query: query as Record<string, string | number | boolean | undefined> }),
 
-  getOrderDetail: (orderId: number) => request<OrderDTO>('GET', `/orders/${orderId}`),
+  getOrderDetail: (orderId: number) => apiRequest<OrderDTO>('GET', `/orders/${orderId}`),
 
-  listClients: () => request<StoreDTO[]>('GET', '/clients'),
+  listClients: () => apiRequest<StoreDTO[]>('GET', '/clients'),
 
-  getStoreCounts: (status: string) => request<Record<number, number>>('GET', '/orders/store-counts', { query: { orderStatus: status } }),
+  getStoreCounts: (status: string) =>
+    apiRequest<Record<number, number>>('GET', '/orders/store-counts', { query: { orderStatus: status } }),
 
-  getMarkups: () => request<MarkupsMap>('GET', '/settings/rbMarkups'),
+  getMarkups: () => apiRequest<MarkupsMap>('GET', '/settings/rbMarkups'),
 
-  saveMarkups: (markups: MarkupsMap) => request<void>('PUT', '/settings/rbMarkups', { body: markups }),
+  saveMarkups: (markups: MarkupsMap) => apiRequest<void>('PUT', '/settings/rbMarkups', { body: markups }),
 
-  fetchRates: (payload: Record<string, unknown>) => request<{ rates: unknown[] }>('POST', '/rates/fetch', { body: payload }),
+  fetchRates: (payload: Record<string, unknown>) =>
+    apiRequest<{ rates: unknown[] }>('POST', '/rates/fetch', { body: payload }),
 };

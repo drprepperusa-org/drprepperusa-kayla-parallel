@@ -20,6 +20,8 @@
   "dependencies": {
     "@rsbuild/plugin-sass": "^1.5.1",
     "@tailwindcss/postcss": "^4.2.2",
+    "@tanstack/react-query": "^5.95.2",
+    "@tanstack/react-query-devtools": "^5.95.2",
     "axios": "^1.13.6",
     "better-sqlite3": "^12.8.0",
     "cors": "^2.8.6",
