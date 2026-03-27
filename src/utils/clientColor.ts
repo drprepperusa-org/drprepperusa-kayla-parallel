@@ -9,7 +9,8 @@
 // HSL palette: high saturation, medium lightness for badge readability
 const BADGE_SATURATION = 65; // %
 const BADGE_LIGHTNESS = 38;  // % — dark enough for white text
-const TEXT_LIGHTNESS_THRESHOLD = 50; // below = use white text, above = black text
+// Text color: white for lightness < 50 (dark bg), black for lightness >= 50 (light bg)
+const TEXT_COLOR = BADGE_LIGHTNESS < 50 ? '#ffffff' : '#111827';
 
 /**
  * djb2 hash: fast, well-distributed for short strings.
@@ -41,6 +42,6 @@ export function getClientColor(clientName: string): ClientColors {
   const hash = djb2Hash(clientName);
   const hue = hash % 360;
   const bg = `hsl(${hue}, ${BADGE_SATURATION}%, ${BADGE_LIGHTNESS}%)`;
-  const text = BADGE_LIGHTNESS < TEXT_LIGHTNESS_THRESHOLD ? '#ffffff' : '#111827';
+  const text = TEXT_COLOR;
   return { bg, text, hue };
 }
