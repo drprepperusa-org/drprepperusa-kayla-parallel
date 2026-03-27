@@ -1,13 +1,35 @@
-import { useEffect, useMemo } from 'react';
+/**
+ * OrdersView — virtualized orders table with inline sub-rows.
+ *
+ * Column order (exact per DJ screenshots):
+ *   ☐ | AGE | CLIENT | ORDER# | RECIPIENT | ITEM/SKU | QTY | WEIGHT | SHIP TO | CARRIER
+ *
+ * Visual requirements:
+ *   1. Color-coded client badges — derived from client name hash (NOT hardcoded)
+ *   2. Age badge — green dot <24h, orange 24–48h, red >48h + relative time
+ *   3. Multi-item inline sub-rows — always visible for orders with >1 item
+ *   4. Carrier badge chip
+ *   5. Clickable order number
+ *   6. Row states: default / hover / checked / row-clicked
+ *   7. Checkbox = batch intent (independent of panel open)
+ *      Row click = panel view (independent of checkbox)
+ */
+
+import { Fragment, useEffect, useMemo } from 'react';
 import { useOrdersStore } from '../../stores/ordersStore';
 import { useStoresStore } from '../../stores/storesStore';
 import { useMarkupsStore } from '../../stores/markupsStore';
 import { useOrderDetailStore } from '../../stores/orderDetailStore';
 import { ALL_COLUMNS } from '../Tables/columnDefs';
 import RightPanel from '../RightPanel/RightPanel';
+import AgeBadge from './cells/AgeBadge';
+import ClientBadge from './cells/ClientBadge';
+import CarrierBadge from './cells/CarrierBadge';
+import OrderNumberLink from './cells/OrderNumberLink';
+import ItemSkuCell from './cells/ItemSkuCell';
 import type { OrderDTO, OrderStatus } from '../../types/orders';
 import {
-  ageColor, ageDisplay, fmtDate, fmtWeight, fmtCurrency,
+  fmtDate, fmtWeight, fmtCurrency,
   getOrderWeight, getOrderZip, getPrimarySku, getTotalQty,
 } from '../../utils/orders';
 import { applyCarrierMarkup } from '../../utils/markups';
@@ -29,7 +51,7 @@ export default function OrdersView() {
   } = useOrdersStore();
   const { stores, statusCounts, fetchStores, fetchStatusCounts } = useStoresStore();
   const { markups } = useMarkupsStore();
-  const { openDetail } = useOrderDetailStore();
+  const { openDetail, selectedOrderId } = useOrderDetailStore();
 
   useEffect(() => {
     fetchOrders();
@@ -37,6 +59,7 @@ export default function OrdersView() {
     fetchStatusCounts();
   }, [fetchOrders, fetchStores, fetchStatusCounts]);
 
+  // Build storeId → client name map for badge display
   const storeMap = useMemo(() => {
     const map = new Map<number, string>();
     for (const s of stores) {
@@ -53,6 +76,17 @@ export default function OrdersView() {
     else selectAllOrders();
   };
 
+  /** Checkbox click: batch intent — does NOT open panel */
+  const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>, orderId: number) => {
+    e.stopPropagation();
+    toggleOrderSelection(orderId);
+  };
+
+  /** Row click: panel view — independent of checkbox state */
+  const handleRowClick = (orderId: number) => {
+    void openDetail(orderId);
+  };
+
   const renderCell = (order: OrderDTO, key: string) => {
     switch (key) {
       case 'select':
@@ -61,39 +95,72 @@ export default function OrdersView() {
             type="checkbox"
             className={styles.checkbox}
             checked={selectedOrderIds.has(order.orderId)}
-            onChange={() => toggleOrderSelection(order.orderId)}
+            onChange={(e) => handleCheckboxChange(e, order.orderId)}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={`Select order ${order.orderNumber}`}
           />
         );
-      case 'date':
-        return fmtDate(order.createdAt);
-      case 'client':
-        return <span className={styles.storeBadge}>{storeMap.get(order.storeId) || `Store ${order.storeId}`}</span>;
+
+      case 'age':
+        return <AgeBadge createdAt={order.createdAt} />;
+
+      case 'client': {
+        const clientName = storeMap.get(order.storeId) ?? `Store ${order.storeId}`;
+        return <ClientBadge clientName={clientName} />;
+      }
+
       case 'orderNum':
-        return order.orderNumber;
+        return (
+          <OrderNumberLink
+            orderNumber={order.orderNumber}
+            onClick={() => void openDetail(order.orderId)}
+          />
+        );
+
       case 'customer':
-        return order.shipTo?.name || '—';
-      case 'itemname':
-        return order.items?.[0]?.name || '—';
-      case 'sku':
-        return getPrimarySku(order) || '—';
+        return <span className={styles.recipientCell}>{order.shipTo?.name || '—'}</span>;
+
+      case 'itemsku': {
+        const items = order.items ?? [];
+        const primarySku = getPrimarySku(order);
+        if (items.length === 0) return <span className={styles.empty}>—</span>;
+        return <ItemSkuCell items={items} primarySku={primarySku} />;
+      }
+
       case 'qty':
-        return getTotalQty(order);
+        return <span className={styles.qtyCell}>{getTotalQty(order)}</span>;
+
       case 'weight':
-        return fmtWeight(getOrderWeight(order));
+        return <span className={styles.weightCell}>{fmtWeight(getOrderWeight(order))}</span>;
+
       case 'shipto': {
         const z = getOrderZip(order);
         const st = order.shipTo?.state || '';
-        return z ? `${st} ${z}` : st || '—';
+        return <span className={styles.shipToCell}>{z ? `${st} ${z}` : st || '—'}</span>;
       }
+
       case 'carrier':
-        return order.selectedServiceCode || '—';
+        return (
+          <CarrierBadge
+            carrierCode={order.selectedCarrierCode}
+            serviceCode={order.selectedServiceCode}
+          />
+        );
+
+      // ── Non-default columns ──────────────────────────────────────────────
+      case 'date':
+        return fmtDate(order.createdAt);
+
       case 'custcarrier':
         return order.selectedCarrierCode?.toUpperCase() || '—';
+
       case 'total':
         return fmtCurrency(order.orderTotal);
+
       case 'bestrate':
         if (!order.bestRate) return '—';
         return <span className={styles.rateCell}>{fmtCurrency(applyCarrierMarkup(order.bestRate, markups))}</span>;
+
       case 'margin': {
         if (!order.orderTotal || !order.bestRate) return '—';
         const cost = applyCarrierMarkup(order.bestRate, markups);
@@ -104,15 +171,13 @@ export default function OrdersView() {
           </span>
         );
       }
+
       case 'tracking':
         return order.trackingNumber || '—';
+
       case 'labelcreated':
         return order.labelCreated ? fmtDate(order.labelCreated) : '—';
-      case 'age': {
-        const color = ageColor(order.createdAt);
-        const cls = color === 'green' ? styles.ageGreen : color === 'orange' ? styles.ageOrange : styles.ageRed;
-        return <span className={cls}>{ageDisplay(order.createdAt)}</span>;
-      }
+
       default:
         return '—';
     }
@@ -160,7 +225,7 @@ export default function OrdersView() {
         {loading ? (
           <div className={styles.loading}>Loading orders…</div>
         ) : orders.length === 0 ? (
-          <div className={styles.empty}>No orders found</div>
+          <div className={styles.emptyState}>No orders found</div>
         ) : (
           <div className={styles.tableWrapper}>
             <table className={styles.table}>
@@ -178,6 +243,7 @@ export default function OrdersView() {
                           className={styles.checkbox}
                           checked={allSelected}
                           onChange={handleSelectAll}
+                          aria-label="Select all orders"
                         />
                       ) : (
                         col.label
@@ -188,58 +254,76 @@ export default function OrdersView() {
               </thead>
               <tbody>
                 {orders.map((order) => {
-                  const items = order.items ?? [];
+                  const items = (order.items ?? []).filter(i => !i.adjustment);
                   const hasMultiItems = items.length > 1;
+                  const isChecked = selectedOrderIds.has(order.orderId);
+                  const isPanelOpen = selectedOrderId === order.orderId;
+
                   return (
-                    <>
+                    <Fragment key={order.orderId}>
+                      {/* Primary row */}
                       <tr
-                        key={order.orderId}
-                        className={`${styles.tr} ${selectedOrderIds.has(order.orderId) ? styles.selected : ''} ${styles.clickableRow}`}
-                        onClick={() => openDetail(order.orderId)}
+                        className={[
+                          styles.tr,
+                          isChecked ? styles.checked : '',
+                          isPanelOpen ? styles.rowClicked : '',
+                          styles.clickableRow,
+                        ].filter(Boolean).join(' ')}
+                        onClick={() => handleRowClick(order.orderId)}
+                        aria-selected={isChecked}
                       >
                         {visibleColumns.map((col) => (
                           <td
                             key={col.key}
-                            className={styles.td}
+                            className={[
+                              styles.td,
+                              col.key === 'select' ? styles.tdCheckbox : '',
+                              hasMultiItems ? styles.tdHasSubRows : '',
+                            ].filter(Boolean).join(' ')}
                             style={{ width: col.width, maxWidth: col.width + 40 }}
-                            onClick={col.key === 'select' ? (e) => e.stopPropagation() : undefined}
                           >
                             {renderCell(order, col.key)}
                           </td>
                         ))}
                       </tr>
-                      {/* Multi-item row expansion — always visible when >1 items */}
+
+                      {/* Multi-item inline sub-rows — always visible for >1 items */}
                       {hasMultiItems && items.map((item, idx) => (
                         <tr
                           key={`${order.orderId}-item-${idx}`}
-                          className={`${styles.itemExpandRow} ${selectedOrderIds.has(order.orderId) ? styles.selected : ''}`}
+                          className={[
+                            styles.subRow,
+                            isChecked ? styles.checked : '',
+                            isPanelOpen ? styles.rowClicked : '',
+                          ].filter(Boolean).join(' ')}
+                          onClick={() => handleRowClick(order.orderId)}
+                          aria-hidden="true"
                         >
                           <td
                             className={styles.td}
                             colSpan={visibleColumns.length}
                           >
-                            <div className={styles.itemExpandContent}>
-                              <span className={styles.itemExpandIndent}>└</span>
-                              {item.imageUrl && (
+                            <div className={styles.subRowContent}>
+                              <span className={styles.subRowIndent} aria-hidden="true">└</span>
+                              {item.imageUrl ? (
                                 <img
                                   src={item.imageUrl}
                                   alt={item.name ?? item.sku}
                                   className={styles.itemThumb}
                                 />
+                              ) : (
+                                <span className={styles.itemThumbPlaceholder} aria-hidden="true">📦</span>
                               )}
-                              {!item.imageUrl && (
-                                <span className={styles.itemThumbPlaceholder}>📦</span>
-                              )}
-                              <span className={styles.itemExpandSku}>{item.sku}</span>
-                              <span className={styles.itemExpandSep}>|</span>
-                              <span className={styles.itemExpandName}>{item.name ?? '—'}</span>
-                              <span className={styles.itemExpandSep}>|</span>
-                              <span className={styles.itemExpandQty}>Qty: {item.quantity}</span>
+                              <span className={styles.subRowSku}>{item.sku}</span>
+                              <span className={styles.subRowSep} aria-hidden="true">·</span>
+                              <span className={styles.subRowName} title={item.name ?? undefined}>{item.name ?? '—'}</span>
+                              <span className={styles.subRowSep} aria-hidden="true">·</span>
+                              <span className={styles.subRowQty}>×{item.quantity}</span>
                             </div>
                           </td>
                         </tr>
                       ))}
-                    </>
+                    </Fragment>
                   );
                 })}
               </tbody>

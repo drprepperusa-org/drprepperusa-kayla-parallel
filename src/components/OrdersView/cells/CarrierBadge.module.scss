@@ -1,0 +1,18 @@
+// CarrierBadge — chip style
+
+.carrierBadge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #e8f0fe;
+  color: #1a56db;
+  border: 1px solid #c7d9fb;
+  white-space: nowrap;
+  letter-spacing: 0.3px;
+}
+
+.empty {
+  color: #9ca3af;
+}
