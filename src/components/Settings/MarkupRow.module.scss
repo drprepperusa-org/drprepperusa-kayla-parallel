@@ -1,0 +1,81 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid #e5e7eb;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.carrierName {
+  flex: 1;
+  font-size: 14px;
+  color: #111827;
+  font-weight: 500;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.typeToggle {
+  display: flex;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  overflow: hidden;
+  height: 32px;
+}
+
+.typeBtn {
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  background: #f9fafb;
+  border: none;
+  cursor: pointer;
+  color: #6b7280;
+  transition: background 0.12s, color 0.12s;
+  height: 100%;
+
+  &:first-child {
+    border-right: 1px solid #d1d5db;
+  }
+
+  &:hover:not(.typeBtn--active) {
+    background: #f3f4f6;
+  }
+}
+
+.typeBtn--active {
+  background: #2563eb;
+  color: #fff;
+}
+
+.valueInput {
+  width: 80px;
+  padding: 5px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 14px;
+  text-align: right;
+  color: #111827;
+
+  &:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+  }
+}
+
+.displayValue {
+  min-width: 70px;
+  text-align: right;
+  font-size: 14px;
+  font-weight: 600;
+  color: #16a34a;
+}

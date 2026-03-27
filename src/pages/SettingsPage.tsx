@@ -1,60 +1,55 @@
 /**
- * SettingsPage.tsx — Application settings, including billing configuration.
+ * SettingsPage.tsx
  *
- * Phase 3 Week 3 (final Phase 3 component).
+ * Application settings page — full-width, no right panel.
  *
- * Q7 (DJ, LOCKED): "Billing should be stored in database."
- * Settings are loaded from /api/settings/billing on mount and persisted on save.
+ * Sections:
+ *   1. Markup Settings  — per-carrier Rate Browser markups (rateMarkupStore)
+ *   2. Cache Management — clear rate cache + refetch
+ *   3. Billing          — billing defaults (billingStore, preserved from prior phase)
  *
- * Billing Settings section:
- *  - Prep Cost per order ($X.XX)
- *  - Package Cost per oz ($X.XXX)
- *  - Sync Frequency (5 / 10 / 30 / 60 min)
- *  - Auto-void after N days (TBD — disabled by default)
- *
- * UX:
- *  - Load current values on mount (from billingStore.loadSettingsFromApi)
- *  - Save button persists to /api/settings/billing via billingStore.updateSettings
- *  - Success toast on save
- *  - Error toast on failure
- *  - Loading indicator while fetching
+ * Route: /settings (wired via App.tsx currentView === 'settings')
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useBillingStore, type BillingSettings } from '../stores/billingStore';
+import { useRateMarkupStore } from '../stores/rateMarkupStore';
+import MarkupRow from '../components/Settings/MarkupRow';
+import CacheManagement from '../components/Settings/CacheManagement';
+import styles from './SettingsPage.module.scss';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Types
+// Debounce helper
+// ─────────────────────────────────────────────────────────────────────────────
+
+function useDebounced<T extends unknown[]>(fn: (...args: T) => void, delay: number) {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  return useCallback(
+    (...args: T) => {
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current);
+      }
+      timerRef.current = setTimeout(() => {
+        fn(...args);
+      }, delay);
+    },
+    [fn, delay],
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Toast (inline, no external dep)
 // ─────────────────────────────────────────────────────────────────────────────
 
 type ToastType = 'success' | 'error';
 
-interface Toast {
+interface ToastData {
   type: ToastType;
   message: string;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-function parsePositiveFloat(value: string): number | null {
-  const parsed = parseFloat(value);
-  if (isNaN(parsed) || parsed < 0) return null;
-  return parsed;
-}
-
-function parsePositiveInt(value: string): number | null {
-  const parsed = parseInt(value, 10);
-  if (isNaN(parsed) || parsed <= 0) return null;
-  return parsed;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Toast component (inline — no external dependency)
-// ─────────────────────────────────────────────────────────────────────────────
-
-function ToastNotification({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }) {
+function ToastNotification({ toast, onDismiss }: { toast: ToastData; onDismiss: () => void }) {
   useEffect(() => {
     const timer = setTimeout(onDismiss, 3000);
     return () => clearTimeout(timer);
@@ -97,41 +92,90 @@ function ToastNotification({ toast, onDismiss }: { toast: Toast; onDismiss: () =
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+function parsePositiveFloat(value: string): number | null {
+  const parsed = parseFloat(value);
+  if (isNaN(parsed) || parsed < 0) return null;
+  return parsed;
+}
+
+function parsePositiveInt(value: string): number | null {
+  const parsed = parseInt(value, 10);
+  if (isNaN(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SettingsPage
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function SettingsPage(): React.ReactElement {
-  const { settings, settingsLoaded, settingsError, loadSettingsFromApi, updateSettings } = useBillingStore();
+  // ── Markup store ─────────────────────────────────────────────────────────
+  const markups = useRateMarkupStore((s) => s.markups);
+  const setMarkupType = useRateMarkupStore((s) => s.setMarkupType);
+  const setMarkupValue = useRateMarkupStore((s) => s.setMarkupValue);
 
-  // ── Local form state (mirrors settings until saved) ───────────────────────
+  // Debounced wrappers — auto-save on change after 500ms
+  const debouncedSetType = useDebounced(
+    (id: string, type: 'flat' | 'pct') => { setMarkupType(id, type); },
+    500,
+  );
+
+  const debouncedSetValue = useDebounced(
+    (id: string, value: number) => { setMarkupValue(id, value); },
+    500,
+  );
+
+  // For immediate visual feedback we also update store immediately;
+  // the "debounced" behavior is relevant for a future API persist call.
+  const handleTypeChange = useCallback(
+    (id: string, type: 'flat' | 'pct') => {
+      setMarkupType(id, type);
+      debouncedSetType(id, type);
+    },
+    [setMarkupType, debouncedSetType],
+  );
+
+  const handleValueChange = useCallback(
+    (id: string, value: number) => {
+      setMarkupValue(id, value);
+      debouncedSetValue(id, value);
+    },
+    [setMarkupValue, debouncedSetValue],
+  );
+
+  // ── Billing store ────────────────────────────────────────────────────────
+  const { settings, settingsLoaded, settingsError, loadSettingsFromApi, updateSettings } =
+    useBillingStore();
+
   const [prepCost, setPrepCost] = useState<string>('0.00');
   const [packageCostPerOz, setPackageCostPerOz] = useState<string>('0.000');
   const [syncFrequencyMin, setSyncFrequencyMin] = useState<5 | 10 | 30 | 60>(5);
   const [autoVoidAfterDays, setAutoVoidAfterDays] = useState<string>('');
   const [autoVoidEnabled, setAutoVoidEnabled] = useState<boolean>(false);
 
-  // ── UI state ─────────────────────────────────────────────────────────────
   const [saving, setSaving] = useState<boolean>(false);
-  const [toast, setToast] = useState<Toast | null>(null);
+  const [toast, setToast] = useState<ToastData | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  // ── Load settings on mount ────────────────────────────────────────────────
   useEffect(() => {
     if (!settingsLoaded) {
       void loadSettingsFromApi();
     }
   }, [settingsLoaded, loadSettingsFromApi]);
 
-  // ── Sync form fields from store when settings load ────────────────────────
   useEffect(() => {
     setPrepCost(settings.prepCost.toFixed(2));
     setPackageCostPerOz(settings.packageCostPerOz.toFixed(3));
     setSyncFrequencyMin(settings.syncFrequencyMin ?? 5);
     setAutoVoidEnabled(settings.autoVoidAfterDays !== null);
-    setAutoVoidAfterDays(settings.autoVoidAfterDays !== null ? String(settings.autoVoidAfterDays) : '');
+    setAutoVoidAfterDays(
+      settings.autoVoidAfterDays !== null ? String(settings.autoVoidAfterDays) : '',
+    );
   }, [settings]);
 
-  // ── Validate and save ─────────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
     const errors: Record<string, string> = {};
 
@@ -144,7 +188,8 @@ export default function SettingsPage(): React.ReactElement {
     let parsedAutoVoid: number | null = null;
     if (autoVoidEnabled) {
       parsedAutoVoid = parsePositiveInt(autoVoidAfterDays);
-      if (parsedAutoVoid === null) errors.autoVoidAfterDays = 'Must be a positive number of days';
+      if (parsedAutoVoid === null)
+        errors.autoVoidAfterDays = 'Must be a positive number of days';
     }
 
     if (Object.keys(errors).length > 0) {
@@ -169,7 +214,14 @@ export default function SettingsPage(): React.ReactElement {
     } finally {
       setSaving(false);
     }
-  }, [prepCost, packageCostPerOz, syncFrequencyMin, autoVoidEnabled, autoVoidAfterDays, updateSettings]);
+  }, [
+    prepCost,
+    packageCostPerOz,
+    syncFrequencyMin,
+    autoVoidEnabled,
+    autoVoidAfterDays,
+    updateSettings,
+  ]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // Render
@@ -199,46 +251,81 @@ export default function SettingsPage(): React.ReactElement {
   };
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 640 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Settings</h1>
-      <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 28 }}>
-        Configure PrepShip billing defaults and sync behavior.
+    <div className={styles.page}>
+      <h1 className={styles.pageTitle}>Settings</h1>
+      <p className={styles.pageSubtitle}>
+        Configure PrepShip billing defaults, carrier markups, and sync behavior.
       </p>
 
-      {/* Load error banner */}
-      {settingsError && (
-        <div
-          role="alert"
-          style={{
-            background: '#fef2f2',
-            border: '1px solid #fca5a5',
-            borderRadius: 6,
-            padding: '10px 14px',
-            color: '#dc2626',
-            fontSize: 13,
-            marginBottom: 20,
-          }}
-        >
-          ⚠ Could not load saved settings: {settingsError}. Showing defaults.
+      {/* ── Section 1: Markup Settings ───────────────────────────────────── */}
+      <section className={styles.sectionCard} aria-labelledby="markup-settings-heading">
+        <h2 id="markup-settings-heading" className={styles.sectionTitle}>
+          Markup Settings
+        </h2>
+        <p className={styles.sectionSubtitle}>
+          $ or % markup added per carrier account — applied to displayed rates in the Rate Browser.
+        </p>
+
+        {/* Sub-section: Rate Browser — Account Markups */}
+        <div>
+          <h3 className={styles.subSectionTitle}>Rate Browser — Account Markups</h3>
+          <p className={styles.subSectionSubtitle}>
+            $ or % added to displayed rates per carrier account. Useful for billing clients above
+            cost.
+          </p>
+
+          <div className={styles.markupTable} role="table" aria-label="Carrier account markups">
+            <div className={styles.markupTableHeader} role="row">
+              <span className={styles.colCarrier} role="columnheader">Carrier Account</span>
+              <span className={styles.colControls} role="columnheader">Type / Value / Display</span>
+            </div>
+
+            {markups.map((entry) => (
+              <MarkupRow
+                key={entry.id}
+                entry={entry}
+                onTypeChange={handleTypeChange}
+                onValueChange={handleValueChange}
+              />
+            ))}
+          </div>
         </div>
-      )}
+      </section>
 
-      {/* Loading indicator */}
-      {!settingsLoaded && (
-        <p style={{ color: '#9ca3af', fontSize: 14, marginBottom: 16 }}>Loading settings…</p>
-      )}
+      {/* ── Section 2: Cache Management ──────────────────────────────────── */}
+      <CacheManagement />
 
-      {/* ── Billing Settings Section ───────────────────────────────────────── */}
-      <section aria-labelledby="billing-settings-heading">
+      {/* ── Section 3: Billing (preserved) ───────────────────────────────── */}
+      <section className={styles.billingCard} aria-labelledby="billing-settings-heading">
+        {settingsError && (
+          <div
+            role="alert"
+            style={{
+              background: '#fef2f2',
+              border: '1px solid #fca5a5',
+              borderRadius: 6,
+              padding: '10px 14px',
+              color: '#dc2626',
+              fontSize: 13,
+              marginBottom: 16,
+            }}
+          >
+            ⚠ Could not load saved settings: {settingsError}. Showing defaults.
+          </div>
+        )}
+
+        {!settingsLoaded && (
+          <p style={{ color: '#9ca3af', fontSize: 14, marginBottom: 12 }}>Loading settings…</p>
+        )}
+
         <h2
           id="billing-settings-heading"
-          style={{ fontSize: 16, fontWeight: 700, marginBottom: 16, paddingBottom: 8, borderBottom: '1px solid #e5e7eb' }}
+          className={styles.billingTitle}
         >
           Billing
         </h2>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 24px' }}>
-
           {/* Prep Cost */}
           <div>
             <label htmlFor="prepCost" style={labelStyle}>
@@ -310,9 +397,7 @@ export default function SettingsPage(): React.ReactElement {
 
           {/* Auto-void */}
           <div>
-            <label style={labelStyle}>
-              Auto-void orders after
-            </label>
+            <label style={labelStyle}>Auto-void orders after</label>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <input
                 id="autoVoidEnabled"
@@ -341,7 +426,6 @@ export default function SettingsPage(): React.ReactElement {
             )}
             <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 3 }}>TBD — disabled by default</p>
           </div>
-
         </div>
 
         {/* Save button */}
