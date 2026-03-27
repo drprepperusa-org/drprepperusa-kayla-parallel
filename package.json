@@ -8,9 +8,14 @@
     "dev": "rsbuild dev --open",
     "preview": "rsbuild preview",
     "typecheck": "tsc --noEmit",
+    "typecheck:server": "tsc --noEmit -p server/tsconfig.json",
     "lint": "eslint src/",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "server:dev": "tsx --watch server/server.ts",
+    "server:start": "tsx server/server.ts",
+    "server:migrate": "tsx server/db/migrate.ts",
+    "server:migrate:rollback": "tsx server/db/migrate.ts rollback"
   },
   "dependencies": {
     "@rsbuild/plugin-sass": "^1.5.1",
@@ -31,6 +36,7 @@
     "react-router-dom": "^7.13.2",
     "sass": "^1.98.0",
     "tailwindcss": "^4.2.2",
+    "uuid": "^13.0.0",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
@@ -45,6 +51,7 @@
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@types/supertest": "^7.2.0",
+    "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^8.57.2",
     "@typescript-eslint/parser": "^8.57.2",
     "@vitejs/plugin-react": "^6.0.1",
