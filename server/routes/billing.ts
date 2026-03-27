@@ -13,8 +13,7 @@
  * Billing calculations use the same logic as the frontend billingService.
  */
 
-import { Router } from 'express';
-import type { Request, Response } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { getDb } from '../db/knex.js';
 import { createLogger } from '../lib/logger.js';
 import { getRatesCache } from '../lib/cache.js';

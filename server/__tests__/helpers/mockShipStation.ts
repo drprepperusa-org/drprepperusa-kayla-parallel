@@ -14,8 +14,7 @@
  *   await mock.stop();
  */
 
-import http from 'http';
-import type { IncomingMessage, ServerResponse } from 'http';
+import http, { type IncomingMessage, type ServerResponse } from 'http';
 
 interface MockShipStation {
   baseUrlV1: string;

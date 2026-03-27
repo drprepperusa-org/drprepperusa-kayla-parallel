@@ -9,8 +9,7 @@
  * Settings are stored in the billing_settings table (client_id = null = global).
  */
 
-import { Router } from 'express';
-import type { Request, Response } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { getDb } from '../db/knex.js';
 import { invalidateRatesCache } from './billing.js';
 import { createLogger } from '../lib/logger.js';
