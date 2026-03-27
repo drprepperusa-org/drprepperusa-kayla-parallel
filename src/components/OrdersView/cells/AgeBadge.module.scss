@@ -1,0 +1,39 @@
+// AgeBadge — colored dot + relative age label.
+// Color tokens centralized here (not in parent) to avoid duplication.
+
+.ageBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.label {
+  line-height: 1;
+}
+
+// ── Color states ──────────────────────────────────────────────────────────────
+
+.green {
+  color: #16a34a;
+  .dot { background: #16a34a; }
+}
+
+.orange {
+  color: #ea580c;
+  .dot { background: #ea580c; }
+}
+
+.red {
+  color: #dc2626;
+  .dot { background: #dc2626; }
+}
