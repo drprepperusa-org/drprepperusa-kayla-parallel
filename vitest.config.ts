@@ -7,7 +7,7 @@ export default defineConfig({
     // Default environment for src/ and tests/ (React components need jsdom)
     environment: 'jsdom',
     globals: true,
-    setupFiles: ['./tests/setup.ts'],
+    setupFiles: ['./tests/setup.ts', './server/__tests__/setup.ts'],
     include: [
       'src/**/*.test.ts',
       'src/**/*.test.tsx',

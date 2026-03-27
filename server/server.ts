@@ -27,6 +27,7 @@ import pinoHttp from 'pino-http';
 
 import { logger } from './lib/logger.js';
 import { getDb } from './db/knex.js';
+import { apiAuthMiddleware } from './middleware/auth.js';
 import { ratesRouter } from './routes/rates.js';
 import { labelsRouter } from './routes/labels.js';
 import { syncRouter } from './routes/sync.js';
@@ -112,6 +113,12 @@ app.get('/health', (_req, res) => {
     env: process.env['NODE_ENV'] ?? 'development',
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// API auth middleware (applies to all /api/* routes)
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.use('/api', apiAuthMiddleware);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // API routes

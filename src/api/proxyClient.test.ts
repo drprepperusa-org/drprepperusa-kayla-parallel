@@ -105,6 +105,7 @@ const STUB_SYNC_RESPONSE: SyncProxyResponse = {
   updatedOrders: 0,
   externallyShipped: 0,
   fetchedCount: 0,
+  orders: [],
 };
 
 const STUB_BILLING_SETTINGS: BillingSettingsProxyResponse = {

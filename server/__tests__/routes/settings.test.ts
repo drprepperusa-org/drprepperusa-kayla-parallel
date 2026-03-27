@@ -7,6 +7,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import type { Knex } from 'knex';
 import { app } from '../../server.js';
+import { TEST_API_KEY } from '../setup.js';
 import { createTestDb, destroyTestDb } from '../helpers/testDb.js';
 
 describe('Settings routes', () => {
@@ -27,6 +28,7 @@ describe('Settings routes', () => {
 
       const res = await request(app)
         .get('/api/settings/billing')
+      .set('x-api-key', TEST_API_KEY)
         .expect(200);
 
       expect(res.body.prepCost).toBe(0);
@@ -45,6 +47,7 @@ describe('Settings routes', () => {
 
       const res = await request(app)
         .get('/api/settings/billing')
+      .set('x-api-key', TEST_API_KEY)
         .expect(200);
 
       expect(res.body.prepCost).toBe(1.50);
@@ -58,6 +61,7 @@ describe('Settings routes', () => {
     it('updates settings', async () => {
       const res = await request(app)
         .put('/api/settings/billing')
+      .set('x-api-key', TEST_API_KEY)
         .send({ prepCost: 2.00, packageCostPerOz: 0.10, syncFrequencyMin: 10 })
         .expect(200);
 
@@ -69,10 +73,12 @@ describe('Settings routes', () => {
     it('partial update — only updates provided fields', async () => {
       await request(app)
         .put('/api/settings/billing')
+      .set('x-api-key', TEST_API_KEY)
         .send({ prepCost: 1.50, syncFrequencyMin: 30 });
 
       const res = await request(app)
         .put('/api/settings/billing')
+      .set('x-api-key', TEST_API_KEY)
         .send({ prepCost: 2.00 })
         .expect(200);
 
@@ -86,6 +92,7 @@ describe('Settings routes', () => {
 
       const res = await request(app)
         .put('/api/settings/billing')
+      .set('x-api-key', TEST_API_KEY)
         .send({ prepCost: 3.00 })
         .expect(200);
 
@@ -95,6 +102,7 @@ describe('Settings routes', () => {
     it('returns 400 for negative prepCost', async () => {
       const res = await request(app)
         .put('/api/settings/billing')
+      .set('x-api-key', TEST_API_KEY)
         .send({ prepCost: -1 })
         .expect(400);
 
@@ -104,6 +112,7 @@ describe('Settings routes', () => {
     it('returns 400 for negative packageCostPerOz', async () => {
       const res = await request(app)
         .put('/api/settings/billing')
+      .set('x-api-key', TEST_API_KEY)
         .send({ packageCostPerOz: -0.5 })
         .expect(400);
 
@@ -113,6 +122,7 @@ describe('Settings routes', () => {
     it('returns 400 for invalid syncFrequencyMin', async () => {
       const res = await request(app)
         .put('/api/settings/billing')
+      .set('x-api-key', TEST_API_KEY)
         .send({ syncFrequencyMin: 7 })
         .expect(400);
 
@@ -122,6 +132,7 @@ describe('Settings routes', () => {
     it('accepts null for autoVoidAfterDays', async () => {
       const res = await request(app)
         .put('/api/settings/billing')
+      .set('x-api-key', TEST_API_KEY)
         .send({ autoVoidAfterDays: null })
         .expect(200);
 
@@ -131,6 +142,7 @@ describe('Settings routes', () => {
     it('returns 400 for autoVoidAfterDays < 1', async () => {
       const res = await request(app)
         .put('/api/settings/billing')
+      .set('x-api-key', TEST_API_KEY)
         .send({ autoVoidAfterDays: 0 })
         .expect(400);
 

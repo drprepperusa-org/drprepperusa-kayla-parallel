@@ -13,6 +13,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
 import { app } from '../../server.js';
+import { TEST_API_KEY } from '../setup.js';
 import { resetRatesCache } from '../../lib/cache.js';
 import { createServerShipStationClient } from '../../lib/shipstation.js';
 import { startMockShipStation } from '../helpers/mockShipStation.js';
@@ -71,6 +72,7 @@ describe('GET /api/rates/:orderId', () => {
   it('returns 400 if required query params missing', async () => {
     const res = await request(app)
       .get('/api/rates/ORD-001')
+      .set('x-api-key', TEST_API_KEY)
       .expect(400);
 
     expect(res.body.code).toBe('VALIDATION_ERROR');
@@ -80,6 +82,7 @@ describe('GET /api/rates/:orderId', () => {
   it('returns 400 for invalid weightOz', async () => {
     const res = await request(app)
       .get('/api/rates/ORD-001?fromZip=92101&toZip=11201&weightOz=abc')
+      .set('x-api-key', TEST_API_KEY)
       .expect(400);
 
     expect(res.body.code).toBe('VALIDATION_ERROR');
@@ -88,6 +91,7 @@ describe('GET /api/rates/:orderId', () => {
   it('returns 400 for negative weightOz', async () => {
     const res = await request(app)
       .get('/api/rates/ORD-001?fromZip=92101&toZip=11201&weightOz=-1')
+      .set('x-api-key', TEST_API_KEY)
       .expect(400);
 
     expect(res.body.code).toBe('VALIDATION_ERROR');
@@ -96,6 +100,7 @@ describe('GET /api/rates/:orderId', () => {
   it('returns rates from ShipStation', async () => {
     const res = await request(app)
       .get('/api/rates/ORD-001?fromZip=92101&toZip=11201&weightOz=24')
+      .set('x-api-key', TEST_API_KEY)
       .expect(200);
 
     expect(res.body.rates).toBeInstanceOf(Array);
@@ -116,11 +121,13 @@ describe('GET /api/rates/:orderId', () => {
     // First request — cache miss
     await request(app)
       .get('/api/rates/ORD-002?fromZip=92101&toZip=11201&weightOz=24')
+      .set('x-api-key', TEST_API_KEY)
       .expect(200);
 
     // Second request — cache hit
     const res = await request(app)
       .get('/api/rates/ORD-002?fromZip=92101&toZip=11201&weightOz=24')
+      .set('x-api-key', TEST_API_KEY)
       .expect(200);
 
     expect(res.body.fromCache).toBe(true);
@@ -133,10 +140,12 @@ describe('GET /api/rates/:orderId', () => {
   it('different params create different cache keys', async () => {
     await request(app)
       .get('/api/rates/ORD-003?fromZip=92101&toZip=11201&weightOz=24')
+      .set('x-api-key', TEST_API_KEY)
       .expect(200);
 
     const res = await request(app)
       .get('/api/rates/ORD-003?fromZip=92101&toZip=10001&weightOz=24')
+      .set('x-api-key', TEST_API_KEY)
       .expect(200);
 
     // Different toZip = different cache key = cache miss
@@ -154,6 +163,7 @@ describe('GET /api/rates/:orderId', () => {
 
     const res = await request(app)
       .get('/api/rates/ORD-004?fromZip=92101&toZip=11201&weightOz=24')
+      .set('x-api-key', TEST_API_KEY)
       .expect(401);
 
     expect(res.body.code).toBe('AUTH_ERROR');
@@ -170,6 +180,7 @@ describe('GET /api/rates/:orderId', () => {
 
     const res = await request(app)
       .get('/api/rates/ORD-005?fromZip=92101&toZip=11201&weightOz=24')
+      .set('x-api-key', TEST_API_KEY)
       .expect(429);
 
     expect(res.body.code).toBe('RATE_LIMITED');
@@ -187,6 +198,7 @@ describe('GET /api/rates/:orderId', () => {
 
     const res = await request(app)
       .get('/api/rates/ORD-006?fromZip=92101&toZip=11201&weightOz=24')
+      .set('x-api-key', TEST_API_KEY)
       .expect(502);
 
     expect(res.body.code).toBe('UPSTREAM_ERROR');
@@ -195,6 +207,7 @@ describe('GET /api/rates/:orderId', () => {
   it('returns cache stats at /api/rates/cache/stats', async () => {
     const res = await request(app)
       .get('/api/rates/cache/stats')
+      .set('x-api-key', TEST_API_KEY)
       .expect(200);
 
     expect(typeof res.body.hits).toBe('number');

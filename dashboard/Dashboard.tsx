@@ -11,7 +11,7 @@ import { CostTrendsPage } from './pages/CostTrends';
 import { TestReliabilityPage } from './pages/TestReliability';
 import { DiscordChannelsPage } from './pages/DiscordChannels';
 import { SystemHealthPage } from './pages/SystemHealth';
-import { Alert } from './components/Charts';
+
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Tab definitions
@@ -49,9 +49,28 @@ interface TabBarProps {
 }
 
 function TabBar({ active, onChange, errors }: TabBarProps) {
+  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    let nextIndex = index;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      nextIndex = (index - 1 + TABS.length) % TABS.length;
+      onChange(TABS[nextIndex].id);
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      nextIndex = (index + 1) % TABS.length;
+      onChange(TABS[nextIndex].id);
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      onChange(TABS[0].id);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      onChange(TABS[TABS.length - 1].id);
+    }
+  };
+
   return (
     <nav role="tablist" aria-label="Dashboard sections" className="flex border-b border-gray-200 bg-white">
-      {TABS.map((tab) => (
+      {TABS.map((tab, index) => (
         <button
           key={tab.id}
           role="tab"
@@ -59,6 +78,7 @@ function TabBar({ active, onChange, errors }: TabBarProps) {
           aria-selected={active === tab.id}
           aria-controls={`panel-${tab.id}`}
           onClick={() => onChange(tab.id)}
+          onKeyDown={(e) => handleTabKeyDown(e, index)}
           className={`relative flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 ${
             active === tab.id
               ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50/50'
@@ -135,7 +155,6 @@ export function Dashboard({
   healthInterval = 10_000,
 }: DashboardProps) {
   const [activeTab, setActiveTab] = useState<TabId>('cost');
-  const [globalError, setGlobalError] = useState<string | null>(null);
 
   const handleMetricsError = useCallback((err: Error) => {
     console.error('[Dashboard] metrics error:', err);
@@ -168,7 +187,6 @@ export function Dashboard({
   });
 
   const handleRefreshAll = useCallback(() => {
-    setGlobalError(null);
     refreshMetrics();
     refreshHealth();
   }, [refreshMetrics, refreshHealth]);
@@ -184,13 +202,6 @@ export function Dashboard({
     <div className="min-h-screen bg-gray-100 flex flex-col">
       <Header onRefreshAll={handleRefreshAll} isMock={mock} />
 
-      {/* Global error */}
-      {globalError && (
-        <div className="px-6 pt-4">
-          <Alert severity="error" message={globalError} />
-        </div>
-      )}
-
       {/* Tabs */}
       <TabBar active={activeTab} onChange={setActiveTab} errors={tabErrors} />
 
@@ -201,7 +212,6 @@ export function Dashboard({
           role="tabpanel"
           id="panel-cost"
           aria-labelledby="tab-cost"
-          hidden={activeTab !== 'cost'}
           className={activeTab === 'cost' ? 'block' : 'hidden'}
         >
           <CostTrendsPage
@@ -216,7 +226,6 @@ export function Dashboard({
           role="tabpanel"
           id="panel-tests"
           aria-labelledby="tab-tests"
-          hidden={activeTab !== 'tests'}
           className={activeTab === 'tests' ? 'block' : 'hidden'}
         >
           <TestReliabilityPage
@@ -231,7 +240,6 @@ export function Dashboard({
           role="tabpanel"
           id="panel-discord"
           aria-labelledby="tab-discord"
-          hidden={activeTab !== 'discord'}
           className={activeTab === 'discord' ? 'block' : 'hidden'}
         >
           <DiscordChannelsPage
@@ -247,7 +255,6 @@ export function Dashboard({
           role="tabpanel"
           id="panel-health"
           aria-labelledby="tab-health"
-          hidden={activeTab !== 'health'}
           className={activeTab === 'health' ? 'block' : 'hidden'}
         >
           <SystemHealthPage

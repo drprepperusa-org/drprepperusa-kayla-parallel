@@ -31,7 +31,6 @@ const HEALTH_URL = '/health';
 export function buildMockHealth(): Health {
   const statuses: Health['status'][] = ['healthy', 'degraded', 'unhealthy'];
   const status = statuses[Math.floor(Math.random() * 3 * 0.7)]; // weighted healthy
-  const now = new Date().toISOString();
 
   return {
     status: status ?? 'healthy',
@@ -46,8 +45,6 @@ export function buildMockHealth(): Health {
       Math.random() > 0.7
         ? ['High error rate on discord sync', 'Cost spike detected in phase 7.3']
         : [],
-    // suppress unused var
-    ...(now && {}),
   };
 }
 

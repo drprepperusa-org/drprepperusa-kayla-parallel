@@ -17,6 +17,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import type { Knex } from 'knex';
 import { app } from '../../server.js';
+import { TEST_API_KEY } from '../setup.js';
 import { createTestDb, destroyTestDb } from '../helpers/testDb.js';
 
 describe('Billing routes', () => {
@@ -38,6 +39,7 @@ describe('Billing routes', () => {
     it('creates a billing record', async () => {
       const res = await request(app)
         .post('/api/billing/ORD-001')
+      .set('x-api-key', TEST_API_KEY)
         .send({ shippingCost: 8.50, weightOz: 24, carrierMarkupPercent: 10 })
         .expect(201);
 
@@ -60,6 +62,7 @@ describe('Billing routes', () => {
 
       const res = await request(app)
         .post('/api/billing/ORD-002')
+      .set('x-api-key', TEST_API_KEY)
         .send({ shippingCost: 8.50, weightOz: 24, carrierMarkupPercent: 0 })
         .expect(201);
 
@@ -72,6 +75,7 @@ describe('Billing routes', () => {
     it('returns 400 for missing shippingCost', async () => {
       const res = await request(app)
         .post('/api/billing/ORD-003')
+      .set('x-api-key', TEST_API_KEY)
         .send({ weightOz: 24, carrierMarkupPercent: 0 })
         .expect(400);
 
@@ -81,6 +85,7 @@ describe('Billing routes', () => {
     it('returns 400 for missing weightOz', async () => {
       const res = await request(app)
         .post('/api/billing/ORD-003')
+      .set('x-api-key', TEST_API_KEY)
         .send({ shippingCost: 8.50, carrierMarkupPercent: 0 })
         .expect(400);
 
@@ -90,6 +95,7 @@ describe('Billing routes', () => {
     it('returns 400 for negative weightOz', async () => {
       const res = await request(app)
         .post('/api/billing/ORD-003')
+      .set('x-api-key', TEST_API_KEY)
         .send({ shippingCost: 8.50, weightOz: -1, carrierMarkupPercent: 0 })
         .expect(400);
 
@@ -99,11 +105,13 @@ describe('Billing routes', () => {
     it('returns 409 on duplicate orderId', async () => {
       await request(app)
         .post('/api/billing/ORD-DUP')
+      .set('x-api-key', TEST_API_KEY)
         .send({ shippingCost: 8.50, weightOz: 24, carrierMarkupPercent: 0 })
         .expect(201);
 
       const res = await request(app)
         .post('/api/billing/ORD-DUP')
+      .set('x-api-key', TEST_API_KEY)
         .send({ shippingCost: 8.50, weightOz: 24, carrierMarkupPercent: 0 })
         .expect(409);
 
@@ -119,11 +127,13 @@ describe('Billing routes', () => {
     it('recalculates billing', async () => {
       await request(app)
         .post('/api/billing/ORD-RECALC')
+      .set('x-api-key', TEST_API_KEY)
         .send({ shippingCost: 8.50, weightOz: 24, carrierMarkupPercent: 0 })
         .expect(201);
 
       const res = await request(app)
         .put('/api/billing/ORD-RECALC')
+      .set('x-api-key', TEST_API_KEY)
         .send({ shippingCost: 12.00, weightOz: 32, carrierMarkupPercent: 15 })
         .expect(200);
 
@@ -135,6 +145,7 @@ describe('Billing routes', () => {
     it('returns 404 if billing does not exist', async () => {
       const res = await request(app)
         .put('/api/billing/ORD-NONEXISTENT')
+      .set('x-api-key', TEST_API_KEY)
         .send({ shippingCost: 8.50, weightOz: 24, carrierMarkupPercent: 0 })
         .expect(404);
 
@@ -144,16 +155,19 @@ describe('Billing routes', () => {
     it('returns 409 if billing is voided', async () => {
       await request(app)
         .post('/api/billing/ORD-VOIDED')
+      .set('x-api-key', TEST_API_KEY)
         .send({ shippingCost: 8.50, weightOz: 24, carrierMarkupPercent: 0 })
         .expect(201);
 
       await request(app)
         .put('/api/billing/ORD-VOIDED/void')
+      .set('x-api-key', TEST_API_KEY)
         .send({ voided: true })
         .expect(200);
 
       const res = await request(app)
         .put('/api/billing/ORD-VOIDED')
+      .set('x-api-key', TEST_API_KEY)
         .send({ shippingCost: 9.00, weightOz: 24, carrierMarkupPercent: 0 })
         .expect(409);
 
@@ -169,11 +183,13 @@ describe('Billing routes', () => {
     it('voids a billing record', async () => {
       await request(app)
         .post('/api/billing/ORD-VOID-ME')
+      .set('x-api-key', TEST_API_KEY)
         .send({ shippingCost: 8.50, weightOz: 24, carrierMarkupPercent: 0 })
         .expect(201);
 
       const res = await request(app)
         .put('/api/billing/ORD-VOID-ME/void')
+      .set('x-api-key', TEST_API_KEY)
         .send({ voided: true })
         .expect(200);
 
@@ -184,16 +200,19 @@ describe('Billing routes', () => {
     it('is idempotent — voiding twice returns same record', async () => {
       await request(app)
         .post('/api/billing/ORD-VOID-IDEM')
+      .set('x-api-key', TEST_API_KEY)
         .send({ shippingCost: 8.50, weightOz: 24, carrierMarkupPercent: 0 })
         .expect(201);
 
       const first = await request(app)
         .put('/api/billing/ORD-VOID-IDEM/void')
+      .set('x-api-key', TEST_API_KEY)
         .send({ voided: true })
         .expect(200);
 
       const second = await request(app)
         .put('/api/billing/ORD-VOID-IDEM/void')
+      .set('x-api-key', TEST_API_KEY)
         .send({ voided: true })
         .expect(200);
 
@@ -203,6 +222,7 @@ describe('Billing routes', () => {
     it('returns 400 if voided is not true', async () => {
       const res = await request(app)
         .put('/api/billing/ORD-VOID-BAD/void')
+      .set('x-api-key', TEST_API_KEY)
         .send({ voided: false })
         .expect(400);
 
@@ -212,6 +232,7 @@ describe('Billing routes', () => {
     it('returns 404 if billing does not exist', async () => {
       const res = await request(app)
         .put('/api/billing/ORD-NO-EXIST/void')
+      .set('x-api-key', TEST_API_KEY)
         .send({ voided: true })
         .expect(404);
 
@@ -226,14 +247,18 @@ describe('Billing routes', () => {
   describe('GET /api/billing', () => {
     beforeEach(async () => {
       // Seed test data
-      await request(app).post('/api/billing/ORD-LIST-1').send({ shippingCost: 8.50, weightOz: 24, carrierMarkupPercent: 0, clientId: 'client-A' });
-      await request(app).post('/api/billing/ORD-LIST-2').send({ shippingCost: 5.00, weightOz: 16, carrierMarkupPercent: 10, clientId: 'client-B' });
-      await request(app).post('/api/billing/ORD-LIST-3').send({ shippingCost: 12.00, weightOz: 32, carrierMarkupPercent: 5, clientId: 'client-A' });
+      await request(app).post('/api/billing/ORD-LIST-1')
+      .set('x-api-key', TEST_API_KEY).send({ shippingCost: 8.50, weightOz: 24, carrierMarkupPercent: 0, clientId: 'client-A' });
+      await request(app).post('/api/billing/ORD-LIST-2')
+      .set('x-api-key', TEST_API_KEY).send({ shippingCost: 5.00, weightOz: 16, carrierMarkupPercent: 10, clientId: 'client-B' });
+      await request(app).post('/api/billing/ORD-LIST-3')
+      .set('x-api-key', TEST_API_KEY).send({ shippingCost: 12.00, weightOz: 32, carrierMarkupPercent: 5, clientId: 'client-A' });
     });
 
     it('returns all billings (paginated)', async () => {
       const res = await request(app)
         .get('/api/billing')
+      .set('x-api-key', TEST_API_KEY)
         .expect(200);
 
       expect(res.body.billings).toBeInstanceOf(Array);
@@ -246,6 +271,7 @@ describe('Billing routes', () => {
     it('filters by clientId', async () => {
       const res = await request(app)
         .get('/api/billing?clientId=client-A')
+      .set('x-api-key', TEST_API_KEY)
         .expect(200);
 
       expect(res.body.billings).toHaveLength(2);
@@ -256,10 +282,12 @@ describe('Billing routes', () => {
     });
 
     it('filters by voided', async () => {
-      await request(app).put('/api/billing/ORD-LIST-1/void').send({ voided: true });
+      await request(app).put('/api/billing/ORD-LIST-1/void')
+      .set('x-api-key', TEST_API_KEY).send({ voided: true });
 
       const voidedRes = await request(app)
         .get('/api/billing?voided=true')
+      .set('x-api-key', TEST_API_KEY)
         .expect(200);
 
       expect(voidedRes.body.total).toBe(1);
@@ -267,6 +295,7 @@ describe('Billing routes', () => {
 
       const activeRes = await request(app)
         .get('/api/billing?voided=false')
+      .set('x-api-key', TEST_API_KEY)
         .expect(200);
 
       expect(activeRes.body.total).toBe(2);
@@ -275,6 +304,7 @@ describe('Billing routes', () => {
     it('returns 400 for invalid page', async () => {
       const res = await request(app)
         .get('/api/billing?page=0')
+      .set('x-api-key', TEST_API_KEY)
         .expect(400);
 
       expect(res.body.code).toBe('VALIDATION_ERROR');
@@ -287,16 +317,22 @@ describe('Billing routes', () => {
 
   describe('POST /api/billing/recalculate-bulk', () => {
     it('recalculates non-voided billings', async () => {
-      await request(app).post('/api/billing/ORD-BULK-1').send({ shippingCost: 8.50, weightOz: 24, carrierMarkupPercent: 0 });
-      await request(app).post('/api/billing/ORD-BULK-2').send({ shippingCost: 5.00, weightOz: 16, carrierMarkupPercent: 0 });
-      await request(app).post('/api/billing/ORD-BULK-3').send({ shippingCost: 3.00, weightOz: 8, carrierMarkupPercent: 0 });
-      await request(app).put('/api/billing/ORD-BULK-3/void').send({ voided: true });
+      await request(app).post('/api/billing/ORD-BULK-1')
+      .set('x-api-key', TEST_API_KEY).send({ shippingCost: 8.50, weightOz: 24, carrierMarkupPercent: 0 });
+      await request(app).post('/api/billing/ORD-BULK-2')
+      .set('x-api-key', TEST_API_KEY).send({ shippingCost: 5.00, weightOz: 16, carrierMarkupPercent: 0 });
+      await request(app).post('/api/billing/ORD-BULK-3')
+      .set('x-api-key', TEST_API_KEY).send({ shippingCost: 3.00, weightOz: 8, carrierMarkupPercent: 0 });
+      await request(app).put('/api/billing/ORD-BULK-3/void')
+      .set('x-api-key', TEST_API_KEY).send({ voided: true });
 
       // Update settings so recalc has new values
-      await request(app).put('/api/settings/billing').send({ prepCost: 1.00 });
+      await request(app).put('/api/settings/billing')
+      .set('x-api-key', TEST_API_KEY).send({ prepCost: 1.00 });
 
       const res = await request(app)
         .post('/api/billing/recalculate-bulk')
+      .set('x-api-key', TEST_API_KEY)
         .send({})
         .expect(200);
 
