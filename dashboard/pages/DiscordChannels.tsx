@@ -2,7 +2,7 @@
  * DiscordChannels page — 21-channel status grid with color coding and detail panel.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { StatusGrid, Alert, type ChannelStatus } from '../components/Charts';
 import type { Metrics } from '../hooks/useMetrics';
 
@@ -29,6 +29,39 @@ function ChannelDetail({
   channel: ChannelStatus;
   onClose: () => void;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    const focusableElements = dialog.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    const firstEl = focusableElements[0];
+    const lastEl = focusableElements[focusableElements.length - 1];
+
+    firstEl?.focus();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+      if (e.key === 'Tab') {
+        if (e.shiftKey && document.activeElement === firstEl) {
+          e.preventDefault();
+          lastEl?.focus();
+        } else if (!e.shiftKey && document.activeElement === lastEl) {
+          e.preventDefault();
+          firstEl?.focus();
+        }
+      }
+    };
+
+    dialog.addEventListener('keydown', handleKeyDown);
+    return () => dialog.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   const diffMs = Date.now() - new Date(channel.last_sync).getTime();
   const mins = Math.floor(diffMs / 60_000);
   const secs = Math.floor((diffMs % 60_000) / 1000);
@@ -38,6 +71,7 @@ function ChannelDetail({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="channel-detail-title"
