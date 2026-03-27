@@ -38,6 +38,7 @@ interface OrdersState {
   pages: number;
   pageSize: number;
   currentStatus: OrderStatus;
+  activeClient: string | null;
   searchQuery: string;
   dateStart: string | null;
   dateEnd: string | null;
@@ -56,6 +57,7 @@ interface OrdersState {
 
   // ── Actions: paginated view ───────────────────────────────────────────────
   setStatus: (status: OrderStatus) => void;
+  setNavFilter: (status: OrderStatus, client: string | null) => void;
   setPage: (page: number) => void;
   setSearchQuery: (query: string) => void;
   setDateRange: (start: string | null, end: string | null) => void;
@@ -168,6 +170,7 @@ export const useOrdersStore = create<OrdersState>((set, get) => ({
   pages: 0,
   pageSize: 50,
   currentStatus: 'awaiting_shipment',
+  activeClient: null,
   searchQuery: '',
   dateStart: null,
   dateEnd: null,
@@ -183,7 +186,11 @@ export const useOrdersStore = create<OrdersState>((set, get) => ({
 
   // ── Paginated view actions ─────────────────────────────────────────────────
   setStatus: (status) => {
-    set({ currentStatus: status, page: 1, selectedOrderIds: new Set() });
+    set({ currentStatus: status, activeClient: null, page: 1, selectedOrderIds: new Set() });
+    get().fetchOrders();
+  },
+  setNavFilter: (status, client) => {
+    set({ currentStatus: status, activeClient: client, page: 1, selectedOrderIds: new Set() });
     get().fetchOrders();
   },
   setPage: (page) => { set({ page }); get().fetchOrders(); },
@@ -202,14 +209,16 @@ export const useOrdersStore = create<OrdersState>((set, get) => ({
   clearSelection: () => set({ selectedOrderIds: new Set() }),
 
   fetchOrders: async () => {
-    const { currentStatus, page, pageSize, allOrders } = get();
+    const { currentStatus, activeClient, page, pageSize, allOrders } = get();
     set({ loading: true, error: null });
     try {
       // Use real synced orders from allOrders if available; fall back to mock data
       // only when allOrders is empty (pre-sync state).
       if (allOrders.length > 0) {
-        // Filter by status and paginate in-memory
-        const filtered = allOrders.filter((o) => o.status === currentStatus);
+        // Filter by status AND activeClient (if set) and paginate in-memory
+        const filtered = allOrders.filter(
+          (o) => o.status === currentStatus && (activeClient == null || o.clientId === activeClient),
+        );
         const total = filtered.length;
         const pages = pageSize > 0 ? Math.ceil(total / pageSize) : 1;
         const start = (page - 1) * pageSize;
@@ -248,7 +257,13 @@ export const useOrdersStore = create<OrdersState>((set, get) => ({
       } else {
         // Fallback: show mock data when no real orders loaded yet
         const result = getMockOrdersByStatus(currentStatus, page, pageSize);
-        set({ orders: result.orders, total: result.total, pages: result.pages, loading: false });
+        // Apply activeClient filter on mock data (clientId is number in DTO)
+        const filteredOrders = activeClient != null
+          ? result.orders.filter((o) => String(o.clientId) === activeClient)
+          : result.orders;
+        const filteredTotal = activeClient != null ? filteredOrders.length : result.total;
+        const filteredPages = pageSize > 0 ? Math.ceil(filteredTotal / pageSize) : 1;
+        set({ orders: filteredOrders, total: filteredTotal, pages: filteredPages, loading: false });
       }
     } catch (err) {
       set({ loading: false, error: err instanceof Error ? err.message : 'Unknown error' });

@@ -4,6 +4,7 @@ import { useStoresStore } from '../../stores/storesStore';
 import { useMarkupsStore } from '../../stores/markupsStore';
 import { useOrderDetailStore } from '../../stores/orderDetailStore';
 import { ALL_COLUMNS } from '../Tables/columnDefs';
+import RightPanel from '../RightPanel/RightPanel';
 import type { OrderDTO, OrderStatus } from '../../types/orders';
 import {
   ageColor, ageDisplay, fmtDate, fmtWeight, fmtCurrency,
@@ -118,98 +119,152 @@ export default function OrdersView() {
   };
 
   return (
-    <div className={styles.container}>
-      {/* Toolbar */}
-      <div className={styles.toolbar}>
-        <div className={styles.toolbarLeft}>
-          <div className={styles.statusTabs}>
-            {STATUSES.map((s) => (
-              <button
-                key={s}
-                className={`${styles.statusTab} ${currentStatus === s ? styles.active : ''}`}
-                onClick={() => setStatus(s)}
-              >
-                {STATUS_LABELS[s]} ({statusCounts[s] || 0})
-              </button>
-            ))}
+    <div className={styles.ordersLayout}>
+      {/* LEFT: table area */}
+      <div className={styles.container}>
+        {/* Toolbar */}
+        <div className={styles.toolbar}>
+          <div className={styles.toolbarLeft}>
+            <div className={styles.statusTabs}>
+              {STATUSES.map((s) => (
+                <button
+                  key={s}
+                  className={`${styles.statusTab} ${currentStatus === s ? styles.active : ''}`}
+                  onClick={() => setStatus(s)}
+                >
+                  {STATUS_LABELS[s]} ({statusCounts[s] || 0})
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className={styles.toolbarRight}>
+            {selectedOrderIds.size > 0 && (
+              <>
+                <span className={styles.selectionBadge}>{selectedOrderIds.size} selected</span>
+                <button className={styles.toolbarBtn}>Batch ▼</button>
+                <button className={styles.toolbarBtn}>Print ▼</button>
+                <button
+                  className={styles.toolbarBtnClear}
+                  onClick={clearSelection}
+                  title="Clear selection"
+                >
+                  ✕
+                </button>
+              </>
+            )}
+            <span>{total} orders</span>
           </div>
         </div>
-        <div className={styles.toolbarRight}>
-          {selectedOrderIds.size > 0 && (
-            <span>{selectedOrderIds.size} selected</span>
-          )}
-          <span>{total} orders</span>
-        </div>
-      </div>
 
-      {/* Table */}
-      {loading ? (
-        <div className={styles.loading}>Loading orders…</div>
-      ) : orders.length === 0 ? (
-        <div className={styles.empty}>No orders found</div>
-      ) : (
-        <div className={styles.tableWrapper}>
-          <table className={styles.table}>
-            <thead className={styles.thead}>
-              <tr>
-                {visibleColumns.map((col) => (
-                  <th
-                    key={col.key}
-                    className={`${styles.th} ${col.sortable ? styles.sortable : ''}`}
-                    style={{ width: col.width, minWidth: col.width }}
-                  >
-                    {col.key === 'select' ? (
-                      <input
-                        type="checkbox"
-                        className={styles.checkbox}
-                        checked={allSelected}
-                        onChange={handleSelectAll}
-                      />
-                    ) : (
-                      col.label
-                    )}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {orders.map((order) => (
-                <tr
-                  key={order.orderId}
-                  className={`${styles.tr} ${selectedOrderIds.has(order.orderId) ? styles.selected : ''} ${styles.clickableRow}`}
-                  onClick={() => openDetail(order.orderId)}
-                >
+        {/* Table */}
+        {loading ? (
+          <div className={styles.loading}>Loading orders…</div>
+        ) : orders.length === 0 ? (
+          <div className={styles.empty}>No orders found</div>
+        ) : (
+          <div className={styles.tableWrapper}>
+            <table className={styles.table}>
+              <thead className={styles.thead}>
+                <tr>
                   {visibleColumns.map((col) => (
-                    <td
+                    <th
                       key={col.key}
-                      className={styles.td}
-                      style={{ width: col.width, maxWidth: col.width + 40 }}
-                      onClick={col.key === 'select' ? (e) => e.stopPropagation() : undefined}
+                      className={`${styles.th} ${col.sortable ? styles.sortable : ''}`}
+                      style={{ width: col.width, minWidth: col.width }}
                     >
-                      {renderCell(order, col.key)}
-                    </td>
+                      {col.key === 'select' ? (
+                        <input
+                          type="checkbox"
+                          className={styles.checkbox}
+                          checked={allSelected}
+                          onChange={handleSelectAll}
+                        />
+                      ) : (
+                        col.label
+                      )}
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Pagination */}
-      {pages > 1 && (
-        <div className={styles.pagination}>
-          <span>Page {page} of {pages} · {total} orders</span>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button className={styles.pageBtn} disabled={page <= 1} onClick={() => setPage(page - 1)}>
-              ← Prev
-            </button>
-            <button className={styles.pageBtn} disabled={page >= pages} onClick={() => setPage(page + 1)}>
-              Next →
-            </button>
+              </thead>
+              <tbody>
+                {orders.map((order) => {
+                  const items = order.items ?? [];
+                  const hasMultiItems = items.length > 1;
+                  return (
+                    <>
+                      <tr
+                        key={order.orderId}
+                        className={`${styles.tr} ${selectedOrderIds.has(order.orderId) ? styles.selected : ''} ${styles.clickableRow}`}
+                        onClick={() => openDetail(order.orderId)}
+                      >
+                        {visibleColumns.map((col) => (
+                          <td
+                            key={col.key}
+                            className={styles.td}
+                            style={{ width: col.width, maxWidth: col.width + 40 }}
+                            onClick={col.key === 'select' ? (e) => e.stopPropagation() : undefined}
+                          >
+                            {renderCell(order, col.key)}
+                          </td>
+                        ))}
+                      </tr>
+                      {/* Multi-item row expansion — always visible when >1 items */}
+                      {hasMultiItems && items.map((item, idx) => (
+                        <tr
+                          key={`${order.orderId}-item-${idx}`}
+                          className={`${styles.itemExpandRow} ${selectedOrderIds.has(order.orderId) ? styles.selected : ''}`}
+                        >
+                          <td
+                            className={styles.td}
+                            colSpan={visibleColumns.length}
+                          >
+                            <div className={styles.itemExpandContent}>
+                              <span className={styles.itemExpandIndent}>└</span>
+                              {item.imageUrl && (
+                                <img
+                                  src={item.imageUrl}
+                                  alt={item.name ?? item.sku}
+                                  className={styles.itemThumb}
+                                />
+                              )}
+                              {!item.imageUrl && (
+                                <span className={styles.itemThumbPlaceholder}>📦</span>
+                              )}
+                              <span className={styles.itemExpandSku}>{item.sku}</span>
+                              <span className={styles.itemExpandSep}>|</span>
+                              <span className={styles.itemExpandName}>{item.name ?? '—'}</span>
+                              <span className={styles.itemExpandSep}>|</span>
+                              <span className={styles.itemExpandQty}>Qty: {item.quantity}</span>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Pagination */}
+        {pages > 1 && (
+          <div className={styles.pagination}>
+            <span>Page {page} of {pages} · {total} orders</span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className={styles.pageBtn} disabled={page <= 1} onClick={() => setPage(page - 1)}>
+                ← Prev
+              </button>
+              <button className={styles.pageBtn} disabled={page >= pages} onClick={() => setPage(page + 1)}>
+                Next →
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* RIGHT: selection/shipping panel */}
+      <RightPanel />
     </div>
   );
 }

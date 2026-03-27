@@ -8,10 +8,22 @@ $text-secondary: #6b7280;
 $text-muted: #9ca3af;
 $accent: #3b82f6;
 
+// ─── Split layout: table + right panel ───────────────────────────────────────
+
+.ordersLayout {
+  display: flex;
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+}
+
 .container {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-width: 0;
   height: 100%;
+  overflow: hidden;
 }
 
 .toolbar {
