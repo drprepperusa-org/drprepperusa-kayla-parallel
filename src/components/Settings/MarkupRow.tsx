@@ -38,13 +38,10 @@ function formatDisplay(type: 'flat' | 'pct', value: number): string {
 export default function MarkupRow({ entry, onTypeChange, onValueChange }: MarkupRowProps): React.ReactElement {
   const { id, name, type, value } = entry;
 
-  const handleTypeFlat = useCallback(() => {
-    onTypeChange(id, 'flat');
-  }, [id, onTypeChange]);
-
-  const handleTypePct = useCallback(() => {
-    onTypeChange(id, 'pct');
-  }, [id, onTypeChange]);
+  // Cycle: flat ($) → pct (%) → flat …
+  const handleTypeCycle = useCallback(() => {
+    onTypeChange(id, type === 'flat' ? 'pct' : 'flat');
+  }, [id, type, onTypeChange]);
 
   const handleValueChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -60,25 +57,26 @@ export default function MarkupRow({ entry, onTypeChange, onValueChange }: Markup
       <span className={styles.carrierName}>{name}</span>
 
       <div className={styles.controls}>
-        {/* Type toggle: $ / % */}
-        <div className={styles.typeToggle} role="group" aria-label={`Markup type for ${name}`}>
+        {/* Type spinner: click to cycle $ ↔ % */}
+        <div className={styles.typeSpinner} aria-label={`Markup type for ${name}`}>
           <button
             type="button"
-            className={`${styles.typeBtn}${type === 'flat' ? ` ${styles['typeBtn--active']}` : ''}`}
-            onClick={handleTypeFlat}
-            aria-pressed={type === 'flat'}
-            aria-label="Dollar amount"
+            className={styles.spinnerUp}
+            onClick={handleTypeCycle}
+            aria-label="Next markup type"
           >
-            $
+            ▲
           </button>
+          <span className={styles.spinnerValue} aria-live="polite">
+            {type === 'flat' ? '$' : '%'}
+          </span>
           <button
             type="button"
-            className={`${styles.typeBtn}${type === 'pct' ? ` ${styles['typeBtn--active']}` : ''}`}
-            onClick={handleTypePct}
-            aria-pressed={type === 'pct'}
-            aria-label="Percentage"
+            className={styles.spinnerDown}
+            onClick={handleTypeCycle}
+            aria-label="Previous markup type"
           >
-            %
+            ▼
           </button>
         </div>
 

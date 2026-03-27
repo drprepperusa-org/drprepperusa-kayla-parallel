@@ -23,37 +23,62 @@
   gap: 8px;
 }
 
-.typeToggle {
+.typeSpinner {
   display: flex;
+  flex-direction: column;
+  align-items: center;
   border: 1px solid #d1d5db;
   border-radius: 5px;
   overflow: hidden;
-  height: 32px;
+  width: 36px;
+  height: 56px;
 }
 
-.typeBtn {
-  padding: 0 10px;
-  font-size: 13px;
-  font-weight: 600;
+.spinnerUp,
+.spinnerDown {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  flex: 1;
   background: #f9fafb;
   border: none;
   cursor: pointer;
   color: #6b7280;
-  transition: background 0.12s, color 0.12s;
-  height: 100%;
+  font-size: 9px;
+  line-height: 1;
+  padding: 0;
+  transition: background 0.1s, color 0.1s;
 
-  &:first-child {
-    border-right: 1px solid #d1d5db;
+  &:hover {
+    background: #e5e7eb;
+    color: #111827;
   }
 
-  &:hover:not(.typeBtn--active) {
-    background: #f3f4f6;
+  &:active {
+    background: #d1d5db;
   }
 }
 
-.typeBtn--active {
-  background: #2563eb;
-  color: #fff;
+.spinnerUp {
+  border-bottom: 1px solid #d1d5db;
+}
+
+.spinnerDown {
+  border-top: 1px solid #d1d5db;
+}
+
+.spinnerValue {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 20px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+  background: #fff;
+  user-select: none;
 }
 
 .valueInput {
