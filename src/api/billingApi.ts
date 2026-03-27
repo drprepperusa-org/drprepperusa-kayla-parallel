@@ -32,7 +32,11 @@ import type {
   UpdateBillingSettingsBody,
 } from '../types/billing';
 
-const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_API_BASE) || '/api';
+// Rsbuild injects PUBLIC_API_BASE via source.define at build time.
+// Falls back to /api (relative) which works when frontend + backend run on same host.
+// For local dev with separate ports, set PUBLIC_API_BASE=http://localhost:3001/api in .env
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const API_BASE: string = (import.meta.env as any).PUBLIC_API_BASE ?? process.env['PUBLIC_API_BASE'] ?? '/api';
 
 /**
  * Generic fetch wrapper. Throws on non-2xx responses.
@@ -56,9 +60,14 @@ async function apiRequest<T>(
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const proxyApiKey: string = (import.meta.env as any).PUBLIC_PROXY_API_KEY ?? process.env['PUBLIC_PROXY_API_KEY'] ?? '';
   const fetchOptions: RequestInit = {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': proxyApiKey,
+    },
   };
   if (options?.body !== undefined) {
     fetchOptions.body = JSON.stringify(options.body);

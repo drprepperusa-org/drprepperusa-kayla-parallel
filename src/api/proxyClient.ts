@@ -20,6 +20,16 @@ import type { ShipStationRate } from '../services/rateService';
 import type { OrderLabel } from '../types/orders';
 
 // ─────────────────────────────────────────────────────────────────────────────
+// API base URL
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Rsbuild injects PUBLIC_API_BASE via source.define at build time.
+// Falls back to /api (relative) which works when frontend + backend run on same host.
+// For local dev with separate ports, set PUBLIC_API_BASE=http://localhost:3001/api in .env
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const API_BASE: string = (import.meta.env as any).PUBLIC_API_BASE ?? process.env['PUBLIC_API_BASE'] ?? '/api';
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Auth header
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -29,10 +39,8 @@ import type { OrderLabel } from '../types/orders';
  * Returns empty string if not set (server will return 401).
  */
 function getProxyApiKey(): string {
-  if (typeof import.meta !== 'undefined' && import.meta.env) {
-    return (import.meta.env['PUBLIC_PROXY_API_KEY'] as string | undefined) ?? '';
-  }
-  return '';
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (import.meta.env as any).PUBLIC_PROXY_API_KEY ?? process.env['PUBLIC_PROXY_API_KEY'] ?? '';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -126,7 +134,7 @@ export async function fetchRatesFromProxy(
 ): Promise<ProxyResult<GetRatesResponse>> {
   return proxyFetch<GetRatesResponse>({
     method: 'GET',
-    path: `/api/rates/${encodeURIComponent(orderId)}`,
+    path: `${API_BASE}/rates/${encodeURIComponent(orderId)}`,
   });
 }
 
@@ -185,7 +193,7 @@ export async function createLabelViaProxy(
 ): Promise<ProxyResult<CreateLabelProxyResponse>> {
   return proxyFetch<CreateLabelProxyResponse>({
     method: 'POST',
-    path: '/api/labels',
+    path: `${API_BASE}/labels`,
     body: request,
   });
 }
@@ -261,7 +269,7 @@ export async function syncViaProxy(
   };
   return proxyFetch<SyncProxyResponse>({
     method: 'POST',
-    path: '/api/sync',
+    path: `${API_BASE}/sync`,
     body,
   });
 }
@@ -286,6 +294,6 @@ export interface BillingSettingsProxyResponse {
 export async function fetchBillingSettingsFromProxy(): Promise<ProxyResult<BillingSettingsProxyResponse>> {
   return proxyFetch<BillingSettingsProxyResponse>({
     method: 'GET',
-    path: '/api/settings/billing',
+    path: `${API_BASE}/settings/billing`,
   });
 }

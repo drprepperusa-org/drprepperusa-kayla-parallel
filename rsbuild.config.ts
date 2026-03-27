@@ -1,6 +1,8 @@
-import { defineConfig } from '@rsbuild/core';
+import { defineConfig, loadEnv } from '@rsbuild/core';
 import { pluginReact } from '@rsbuild/plugin-react';
 import { pluginSass } from '@rsbuild/plugin-sass';
+
+const { publicVars } = loadEnv({ prefixes: ['PUBLIC_'] });
 
 export default defineConfig({
   plugins: [pluginReact(), pluginSass()],
@@ -16,5 +18,6 @@ export default defineConfig({
     entry: {
       index: './src/index.tsx',
     },
+    define: publicVars,
   },
 });
