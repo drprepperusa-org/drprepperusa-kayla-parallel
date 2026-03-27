@@ -14,6 +14,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useBillingStore, type BillingSettings } from '../stores/billingStore';
 import { useRateMarkupStore } from '../stores/rateMarkupStore';
+import { useBillingSettings, useUpdateBillingSettings } from '../hooks/useBillingSettings';
 import MarkupRow from '../components/Settings/MarkupRow';
 import CacheManagement from '../components/Settings/CacheManagement';
 import styles from './SettingsPage.module.scss';
@@ -150,6 +151,11 @@ export default function SettingsPage(): React.ReactElement {
   const { settings, settingsLoaded, settingsError, loadSettingsFromApi, updateSettings } =
     useBillingStore();
 
+  // ── React Query: billing settings (backend source of truth) ─────────────
+  // Falls back to billingStore defaults if the backend is unavailable.
+  const { data: remoteSettings } = useBillingSettings();
+  const updateBillingSettingsMutation = useUpdateBillingSettings();
+
   const [prepCost, setPrepCost] = useState<string>('0.00');
   const [packageCostPerOz, setPackageCostPerOz] = useState<string>('0.000');
   const [syncFrequencyMin, setSyncFrequencyMin] = useState<5 | 10 | 30 | 60>(5);
@@ -166,15 +172,18 @@ export default function SettingsPage(): React.ReactElement {
     }
   }, [settingsLoaded, loadSettingsFromApi]);
 
+  // Populate form from backend (React Query) when available; otherwise fall
+  // back to the billingStore values populated by loadSettingsFromApi().
   useEffect(() => {
-    setPrepCost(settings.prepCost.toFixed(2));
-    setPackageCostPerOz(settings.packageCostPerOz.toFixed(3));
-    setSyncFrequencyMin(settings.syncFrequencyMin ?? 5);
-    setAutoVoidEnabled(settings.autoVoidAfterDays !== null);
+    const src = remoteSettings ?? settings;
+    setPrepCost(src.prepCost.toFixed(2));
+    setPackageCostPerOz(src.packageCostPerOz.toFixed(3));
+    setSyncFrequencyMin(src.syncFrequencyMin ?? 5);
+    setAutoVoidEnabled((src.autoVoidAfterDays ?? null) !== null);
     setAutoVoidAfterDays(
-      settings.autoVoidAfterDays !== null ? String(settings.autoVoidAfterDays) : '',
+      (src.autoVoidAfterDays ?? null) !== null ? String(src.autoVoidAfterDays) : '',
     );
-  }, [settings]);
+  }, [remoteSettings, settings]);
 
   const handleSave = useCallback(async () => {
     const errors: Record<string, string> = {};
@@ -207,7 +216,10 @@ export default function SettingsPage(): React.ReactElement {
 
     setSaving(true);
     try {
+      // Persist via billingStore (which also calls the API internally) and
+      // separately via React Query mutation to keep the query cache in sync.
       await updateSettings(newSettings);
+      await updateBillingSettingsMutation.mutateAsync(newSettings);
       setToast({ type: 'success', message: 'Billing settings saved.' });
     } catch (_err: unknown) {
       setToast({ type: 'error', message: 'Failed to save settings. Please try again.' });
@@ -221,6 +233,7 @@ export default function SettingsPage(): React.ReactElement {
     autoVoidEnabled,
     autoVoidAfterDays,
     updateSettings,
+    updateBillingSettingsMutation,
   ]);
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -433,9 +446,9 @@ export default function SettingsPage(): React.ReactElement {
           <button
             type="button"
             onClick={() => { void handleSave(); }}
-            disabled={saving || !settingsLoaded}
+            disabled={saving || !settingsLoaded || updateBillingSettingsMutation.isPending}
             style={{
-              background: saving ? '#9ca3af' : '#2563eb',
+              background: saving || updateBillingSettingsMutation.isPending ? '#9ca3af' : '#2563eb',
               color: '#fff',
               border: 'none',
               borderRadius: 6,

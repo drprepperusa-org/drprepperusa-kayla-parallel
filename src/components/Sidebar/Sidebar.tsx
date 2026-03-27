@@ -10,6 +10,7 @@ import { useState, useCallback, useRef, useMemo } from 'react';
 import { useUIStore, type ViewType } from '../../stores/uiStore';
 import { useOrdersStore } from '../../stores/ordersStore';
 import { useStoresStore } from '../../stores/storesStore';
+import { useClients } from '../../hooks/useClients';
 import SyncIndicator from '../shared/SyncIndicator';
 import type { OrderStatus } from '../../types/orders';
 import styles from './Sidebar.module.scss';
@@ -37,6 +38,21 @@ export default function Sidebar() {
   const { setView, sidebarOpen, setSidebarOpen } = useUIStore();
   const { currentStatus, activeClient, setNavFilter, setSearchQuery, allOrders, sync, startSync } = useOrdersStore();
   const { stores } = useStoresStore();
+
+  // React Query: clients list from backend for richer display names.
+  // Falls back to store-derived names if the backend is unavailable.
+  const { data: clientsData } = useClients();
+
+  // Build clientId → name map from backend; falls back to empty map
+  const clientNameMap = useMemo(() => {
+    const map = new Map<number, string>();
+    if (clientsData) {
+      for (const c of clientsData) {
+        map.set(c.clientId, c.name);
+      }
+    }
+    return map;
+  }, [clientsData]);
 
   const [expandedSections, setExpandedSections] = useState<Set<OrderStatus>>(
     new Set(['awaiting_shipment'])
@@ -94,12 +110,13 @@ export default function Sidebar() {
     setSearchQuery('');
   };
 
-  // Build sorted client list per status (sorted by count desc)
+  // Build sorted client list per status (sorted by count desc).
+  // Prefer display name from backend clients list; fall back to store name.
   const getSortedClients = (status: OrderStatus) => {
     return stores
       .map((store) => ({
         clientId: String(store.clientId),
-        name: store.name,
+        name: clientNameMap.get(store.clientId) ?? store.name,
         count: getClientCount(status, String(store.clientId)),
       }))
       .sort((a, b) => b.count - a.count);

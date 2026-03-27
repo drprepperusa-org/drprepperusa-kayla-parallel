@@ -17,6 +17,7 @@
 
 import { Fragment, useEffect, useMemo } from 'react';
 import { useOrdersStore } from '../../stores/ordersStore';
+import { useSync } from '../../hooks/useSync';
 import { useStoresStore } from '../../stores/storesStore';
 import { useMarkupsStore } from '../../stores/markupsStore';
 import { useOrderDetailStore } from '../../stores/orderDetailStore';
@@ -64,9 +65,13 @@ export default function OrdersView() {
     orders, loading, total, page, pages, currentStatus,
     setStatus, setPage, selectedOrderIds, toggleOrderSelection,
     selectAllOrders, clearSelection, fetchOrders,
-    sync, startSync,
+    sync,
     zoom, setZoom,
   } = useOrdersStore();
+
+  // React Query-backed sync: wires to backend POST /sync.
+  // Falls back gracefully (syncError) if backend is unavailable.
+  const { sync: triggerSync, syncing: syncMutating } = useSync();
   const { stores, statusCounts, fetchStores, fetchStatusCounts } = useStoresStore();
   const { markups } = useMarkupsStore();
   const { openDetail, selectedOrderId } = useOrderDetailStore();
@@ -107,7 +112,7 @@ export default function OrdersView() {
   };
 
   const handleSync = () => {
-    startSync();
+    triggerSync();
   };
 
   const handleZoom = (level: ZoomLevel) => {
@@ -271,7 +276,7 @@ export default function OrdersView() {
                 <button
                   className={styles.toolbarBtn}
                   onClick={handleSync}
-                  disabled={sync.syncing}
+                  disabled={sync.syncing || syncMutating}
                   title="Sync orders now"
                 >
                   ↻ Sync

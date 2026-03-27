@@ -13,7 +13,15 @@
  */
 
 import { create } from 'zustand';
-import type { MarkupRule } from '../utils/markupService';
+
+// MarkupRule was previously imported from utils/markupService (now deleted).
+// Defined here as the canonical type for the billing markup chain.
+interface MarkupRule {
+  carrier: string;
+  markupPercent: number;
+  clientId: string;
+  updatedAt: Date;
+}
 
 // ---------------------------------------------------------------------------
 // Store interface
